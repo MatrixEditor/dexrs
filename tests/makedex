@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
+cd $SCRIPT_DIR/
+
+DX="$1"
+JAVAC="javac"
+
+INPUT="$2"
+
+# 1. compile .java to .class
+$JAVAC --release 8 $INPUT.java
+
+# 2. convert .class to .dex
+java -jar $DX --dex --debug --output $INPUT.dex $INPUT.class
