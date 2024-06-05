@@ -1,5 +1,5 @@
 use super::encoded_value::{EncodedField, EncodedMethod};
-use super::{types::*, EncodedCatchHandlerList};
+use super::types::*;
 use binrw::meta::{EndianKind, ReadEndian};
 use binrw::{binrw, BinRead, Endian};
 use std::io;

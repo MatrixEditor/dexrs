@@ -1,10 +1,8 @@
-use crate::dalvik::dex::{AccessFlags, DexType, EncodedField, FieldIdItem};
+use crate::dalvik::dex::{AccessFlags, DexType, EncodedField};
 use crate::dalvik::error::Result;
 
 use super::annotation::DexAnnotation;
-use super::{Dex, DexValue, IDex, IDexRc, IDexRef};
-use binrw::BinRead;
-use std::io::{Read, Seek};
+use super::{DexValue, IDexRef};
 use std::rc::Rc;
 
 #[derive(Debug)]
@@ -32,7 +30,6 @@ pub struct DexField {
     /// present if a static initializer has been declared for this
     /// field.
     pub init_value: Option<DexValue>,
-
 }
 
 impl DexField {

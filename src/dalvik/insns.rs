@@ -40,7 +40,7 @@ pub fn disasm(item: &CodeItem, dex: IDexRef<'_>) -> Result<Vec<Insn>> {
         let start = (cursor.position() - 2) as usize;
 
         let mut insn = Insn {
-            opcode: &opcode,
+            opcode,
             range: start..(start + opcode.length as usize),
             format: InsnFormat::Format00x,
             payload: None,
@@ -65,7 +65,7 @@ pub fn disasm(item: &CodeItem, dex: IDexRef<'_>) -> Result<Vec<Insn>> {
         }
         insns.push(insn);
     }
-    return Ok(insns);
+    Ok(insns)
 }
 
 // just the implementation for above
@@ -249,6 +249,17 @@ pub struct Insn {
 }
 
 type IFormatFactory = dyn Fn(&mut Cursor<&[u8]>, &mut Insn, IDexRef<'_>) -> Result<InsnFormat>;
+//                    \____/ \________________/  \____________________/     \________________/ - The function returns an instance of
+//                      |            |                     |                                     InsnFormat type with all parsed data
+//                      |            |                     |
+//                      |            |                     +------------------------------------ Mutable reference to the current DEX
+//                      |            |                                                           file to resolve possible index refs
+//                      |            |
+//                      |            +---------------------------------------------------------- A mutable reference to the code pointer
+//                      |                                                                        (as u8 values to apply ByteorderReadExt)
+//                      |
+//                      +----------------------------------------------------------------------- A type that can be represented by the
+//                                                                                               Fn-trait
 
 pub struct Opcode {
     pub opcode: u8,
@@ -613,12 +624,12 @@ pub const OPCODES: &[Opcode] = &[
 
 /// pseudo-format used for unused opcodes; suggested for use as the nominal
 /// format for a breakpoint opcode
-pub fn format_00x<'a>(
-    _: &mut Cursor<&'a [u8]>,
+pub fn format_00x(
+    _: &mut Cursor<&'_ [u8]>,
     _: &mut Insn,
     _: IDexRef<'_>,
 ) -> Result<InsnFormat> {
-    return Ok(InsnFormat::Format00x);
+    Ok(InsnFormat::Format00x)
 }
 
 pub fn format_10x(
@@ -641,7 +652,7 @@ pub fn format_10x(
             _ => {}
         }
     }
-    return Ok(InsnFormat::Format10x);
+    Ok(InsnFormat::Format10x)
 }
 
 /// ID: 12x
@@ -653,10 +664,10 @@ pub fn format_12x(
     _: IDexRef<'_>,
 ) -> Result<InsnFormat> {
     let value = code.read_u16::<LittleEndian>()?;
-    return Ok(InsnFormat::Format12x {
+    Ok(InsnFormat::Format12x {
         a: ((value & 0x0F00) >> 8) as u8,
         b: ((value & 0xF000) >> 12) as u8,
-    });
+    })
 }
 
 /// ID: 11n
@@ -668,10 +679,10 @@ pub fn format_11n(
     _: IDexRef<'_>,
 ) -> Result<InsnFormat> {
     let value = code.read_u16::<LittleEndian>()?;
-    return Ok(InsnFormat::Format11n {
+    Ok(InsnFormat::Format11n {
         a: ((value & 0x0F00) >> 8) as u8,
         b: Index::Literal(((value & 0xF000) >> 12) as i64),
-    });
+    })
 }
 
 /// ID: 11x
@@ -683,9 +694,9 @@ pub fn format_11x(
     _: IDexRef<'_>,
 ) -> Result<InsnFormat> {
     let value = code.read_u16::<LittleEndian>()?;
-    return Ok(InsnFormat::Format11x {
+    Ok(InsnFormat::Format11x {
         a: ((value & 0xFF00) >> 8) as u8,
-    });
+    })
 }
 
 /// ID: 10t
@@ -697,9 +708,9 @@ pub fn format_10t(
     _: IDexRef<'_>,
 ) -> Result<InsnFormat> {
     let value = code.read_u16::<LittleEndian>()?;
-    return Ok(InsnFormat::Format10t {
+    Ok(InsnFormat::Format10t {
         a: ((value & 0xFF00) >> 8) as i8,
-    });
+    })
 }
 
 /// ID: 20t
@@ -711,10 +722,9 @@ pub fn format_20t(
     _: IDexRef<'_>,
 ) -> Result<InsnFormat> {
     code.seek(std::io::SeekFrom::Current(2))?;
-    let format = InsnFormat::Format20t {
+    Ok(InsnFormat::Format20t {
         a: code.read_i16::<LittleEndian>()?,
-    };
-    Ok(format)
+    })
 }
 
 /// ID: 20bc (unused)
@@ -727,10 +737,10 @@ pub fn format_20bc(
 ) -> Result<InsnFormat> {
     let value = code.read_u16::<LittleEndian>()?;
     let index_value = code.read_u16::<LittleEndian>()?;
-    return Ok(InsnFormat::Format20bc {
+    Ok(InsnFormat::Format20bc {
         a: ((value & 0xFF00) >> 8) as u8,
         b: Index::Unknown(index_value as u32),
-    });
+    })
 }
 
 /// ID: 22x
@@ -742,10 +752,10 @@ pub fn format_22x(
     _: IDexRef<'_>,
 ) -> Result<InsnFormat> {
     let value = code.read_u16::<LittleEndian>()?;
-    return Ok(InsnFormat::Format22x {
+    Ok(InsnFormat::Format22x {
         a: ((value & 0xFF00) >> 8) as u8,
-        b: code.read_u16::<LittleEndian>()? as u16,
-    });
+        b: code.read_u16::<LittleEndian>()?,
+    })
 }
 
 /// ID: 21t
@@ -757,10 +767,10 @@ pub fn format_21t(
     _: IDexRef<'_>,
 ) -> Result<InsnFormat> {
     let value = code.read_u16::<LittleEndian>()?;
-    return Ok(InsnFormat::Format21t {
+    Ok(InsnFormat::Format21t {
         a: ((value & 0xFF00) >> 8) as u8,
         b: code.read_u16::<LittleEndian>()? as i16,
-    });
+    })
 }
 
 /// ID: 21s
@@ -772,10 +782,10 @@ pub fn format_21s(
     _: IDexRef<'_>,
 ) -> Result<InsnFormat> {
     let value = code.read_u16::<LittleEndian>()?;
-    return Ok(InsnFormat::Format21s {
+    Ok(InsnFormat::Format21s {
         a: ((value & 0xFF00) >> 8) as u8,
         b: Index::Literal(code.read_u16::<LittleEndian>()? as i64),
-    });
+    })
 }
 
 /// ID: 21h
@@ -816,7 +826,7 @@ pub fn format_21c(
 ) -> Result<InsnFormat> {
     let value = code.read_u16::<LittleEndian>()?;
     let index_value = code.read_u16::<LittleEndian>()? as u32;
-    let res = Ok(InsnFormat::Format21c {
+    Ok(InsnFormat::Format21c {
         a: ((value & 0xFF00) >> 8) as u8,
         b: match value & 0xFF {
             0x1A =>
@@ -846,8 +856,7 @@ pub fn format_21c(
             }
             _ => Index::Unknown(index_value),
         },
-    });
-    res
+    })
 }
 
 /// ID: 23x
@@ -951,11 +960,10 @@ pub fn format_30t(
     _: IDexRef<'_>,
 ) -> Result<InsnFormat> {
     code.seek(std::io::SeekFrom::Current(2))?;
-    let format = InsnFormat::Format30t {
+    Ok(InsnFormat::Format30t {
         // index 0 is where the opcode is stored
         a: code.read_i32::<LittleEndian>()?,
-    };
-    Ok(format)
+    })
 }
 
 /// ID: 32x
@@ -967,11 +975,10 @@ pub fn format_32x(
     _: IDexRef<'_>,
 ) -> Result<InsnFormat> {
     code.seek(std::io::SeekFrom::Current(2))?;
-    let format = InsnFormat::Format32x {
+    Ok(InsnFormat::Format32x {
         a: code.read_u16::<LittleEndian>()?,
         b: code.read_u16::<LittleEndian>()?,
-    };
-    Ok(format)
+    })
 }
 
 /// ID: 31i
@@ -984,11 +991,10 @@ pub fn format_31i(
 ) -> Result<InsnFormat> {
     let value = code.read_u16::<LittleEndian>()?;
     let index = code.read_i32::<LittleEndian>()?;
-    let format = InsnFormat::Format31i {
+    Ok(InsnFormat::Format31i {
         a: ((value & 0xFF) >> 8) as u8,
         b: Index::Literal(index as i64),
-    };
-    Ok(format)
+    })
 }
 
 /// ID: 31t
@@ -1001,11 +1007,10 @@ pub fn format_31t(
 ) -> Result<InsnFormat> {
     let value = code.read_u16::<LittleEndian>()?;
     let b = code.read_i32::<LittleEndian>()?;
-    let format = InsnFormat::Format31t {
+    Ok(InsnFormat::Format31t {
         a: ((value & 0xFF) >> 8) as u8,
         b,
-    };
-    Ok(format)
+    })
 }
 
 /// ID: 31c
@@ -1019,11 +1024,10 @@ pub fn format_31c(
     // note: same as 31i
     let a = code.read_u16::<LittleEndian>()?;
     let index = code.read_u32::<LittleEndian>()?;
-    let format = InsnFormat::Format31c {
+    Ok(InsnFormat::Format31c {
         a: ((a & 0xFF) >> 8) as u8,
         b: Index::String(dex.get_string(index)?),
-    };
-    Ok(format)
+    })
 }
 
 /// ID: 35c
@@ -1037,7 +1041,7 @@ pub fn format_35c(
     let first = code.read_u16::<LittleEndian>()?;
     let second = code.read_u16::<LittleEndian>()?;
     let third = code.read_u16::<LittleEndian>()?;
-    let fmt = InsnFormat::Format35c {
+    Ok(InsnFormat::Format35c {
         a: ((first & 0xF000) >> 12) as u32,
         g: ((first & 0x0F00) >> 8) as u32,
         b: match first & 0x00FF {
@@ -1058,8 +1062,7 @@ pub fn format_35c(
         e: ((third & 0x0F00) >> 8) as u32,
         d: ((third & 0x00F0) >> 4) as u32,
         c: (third & 0x000F) as u32,
-    };
-    Ok(fmt)
+    })
 }
 
 /// ID: 3rc
@@ -1076,7 +1079,7 @@ pub fn format_3rc(
     let c = code.read_u16::<LittleEndian>()?;
 
     let n = (c + count) - 1;
-    let format = InsnFormat::Format3rc {
+    Ok( InsnFormat::Format3rc {
         a: count as u8,
         b: match value & 0xFF {
             0x25 /* filled-new-array/range */ => {
@@ -1096,8 +1099,7 @@ pub fn format_3rc(
         the first register.
          */
         regs: c..n,
-    };
-    Ok(format)
+    })
 }
 
 /// ID: 45cc
@@ -1112,7 +1114,7 @@ pub fn format_45cc(
     let b: u16 = code.read_u16::<LittleEndian>()?;
     let v2 = code.read_u16::<LittleEndian>()?;
     let h: u16 = code.read_u16::<LittleEndian>()?;
-    let format = InsnFormat::Format45cc {
+    Ok(InsnFormat::Format45cc {
         a: ((value & 0xF000) >> 12) as u8,
         g: ((value & 0x0F00) >> 8) as u8,
         b: Index::Method(dex.get_method(b as u32)?),
@@ -1121,8 +1123,7 @@ pub fn format_45cc(
         d: ((v2 & 0x00F0) >> 4) as u8,
         c: (v2 & 0x000F) as u8,
         h: Index::Proto(dex.get_proto(h as u32)?),
-    };
-    Ok(format)
+    })
 }
 
 /// ID: 4rcc
@@ -1138,14 +1139,13 @@ pub fn format_4rcc(
     let c = code.read_u16::<LittleEndian>()?;
     let h = code.read_u16::<LittleEndian>()?;
     let n = (c + count) - 1;
-    let format = InsnFormat::Format4rcc {
+    Ok(InsnFormat::Format4rcc {
         a: count as u8,
         b: Index::Method(dex.get_method(b as u32)?),
         c,
         regs: c..n,
         h: Index::Proto(dex.get_proto(h as u32)?),
-    };
-    Ok(format)
+    })
 }
 
 /// ID: 51l
@@ -1158,11 +1158,10 @@ pub fn format_51l(
 ) -> Result<InsnFormat> {
     let a = ((code.read_u16::<LittleEndian>()? & 0xF000) >> 12) as u8;
     let b = code.read_i64::<LittleEndian>()?;
-    let format = InsnFormat::Format51l {
+    Ok(InsnFormat::Format51l {
         a,
         b: Index::Literal(b),
-    };
-    Ok(format)
+    })
 }
 
 // payload implementation

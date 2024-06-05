@@ -336,10 +336,10 @@ pub trait SmaliWrite: Write {
                 }
 
                 _ => {
-                    write!(self, "{}", "<not-implemented>")?;
+                    write!(self, "<not-implemented>")?;
                 }
             }
-            return Ok(());
+            Ok(())
         }
     }
 
@@ -411,7 +411,7 @@ pub trait SmaliWrite: Write {
 
         if let Some(init_val) = &field.init_value {
             write!(self, " = ")?;
-            self.write_value(&init_val, dex)?;
+            self.write_value(init_val, dex)?;
         }
 
         if !field.annotations.is_empty() {

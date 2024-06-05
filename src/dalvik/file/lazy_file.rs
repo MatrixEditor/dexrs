@@ -9,7 +9,6 @@ use std::{
     fmt::Debug,
     io::{self, Read, Seek},
     rc::Rc,
-    time,
 };
 
 use super::{method::DexPrototype, DexClassDef, IDex};
@@ -76,11 +75,13 @@ impl<'b, R: Read + Seek> Dex<'b, R> {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub(super) fn seekc(&mut self, offset: i64) -> Result<()> {
         self.fd.seek(io::SeekFrom::Current(offset))?;
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub(super) fn seeke(&mut self, offset: i64) -> Result<()> {
         self.fd.seek(io::SeekFrom::End(offset))?;
         Ok(())

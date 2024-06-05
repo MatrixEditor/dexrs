@@ -1,11 +1,7 @@
-use super::*;
 use crate::dalvik::error::{Error, Result};
-use binrw::BinRead;
 use std::{
     fmt::{Debug, Display},
-    io::{self, Read, Seek},
     rc::Rc,
-    result,
 };
 
 /// A TypeDescriptor is the representation of any type, including
@@ -33,7 +29,7 @@ impl DexType {
         match *chars.peek()? {
             // primitive types
             'V' | 'Z' | 'C' | 'B' | 'S' | 'I' | 'F' | 'J' | 'D' => {
-                return Some(DexType {
+                Some(DexType {
                     descriptor: descriptor[i..].to_string(),
                     dim: i,
                     primitive: true,
@@ -42,14 +38,14 @@ impl DexType {
             // REVISIT:
             // resolve the class type descriptor directly
             'L' => {
-                return Some(DexType {
+                Some(DexType {
                     descriptor: descriptor[i..].to_string(),
                     dim: i,
                     primitive: false,
                 })
             }
             _ => {
-                return None;
+                None
             }
         }
     }
@@ -70,7 +66,7 @@ impl DexType {
         match *chars.peek().unwrap() {
             // primitive types
             'V' | 'Z' | 'C' | 'B' | 'S' | 'I' | 'F' | 'J' | 'D' => {
-                return Ok(DexType {
+                Ok(DexType {
                     descriptor: descriptor[i..].to_string(),
                     dim: i,
                     primitive: true,
@@ -79,17 +75,17 @@ impl DexType {
             // REVISIT:
             // resolve the class type descriptor directly
             'L' => {
-                return Ok(DexType {
+                Ok(DexType {
                     descriptor: descriptor[i..].to_string(),
                     dim: i,
                     primitive: false,
                 })
             }
             _ => {
-                return Err(Error::MalformedDescriptor(format!(
+                Err(Error::MalformedDescriptor(format!(
                     "Invalid type descriptor: {}",
                     descriptor
-                )));
+                )))
             }
         }
     }
@@ -109,7 +105,9 @@ impl Debug for DexType {
         write!(
             f,
             "DexType {{ descriptor: \"{}\", dim: {}, primitive: {} }}",
-            self.descriptor.escape_default(), self.dim, self.primitive
+            self.descriptor.escape_default(),
+            self.dim,
+            self.primitive
         )
     }
 }

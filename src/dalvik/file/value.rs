@@ -1,9 +1,6 @@
 use std::rc::Rc;
 
-use crate::dalvik::{
-    dex::*,
-    error::{Error, Result},
-};
+use crate::dalvik::{dex::*, error::Result};
 
 use super::{annotation::DexAnnotation, method::DexPrototype, IDexRef};
 

@@ -1,5 +1,5 @@
 use crate::dalvik::dex::{
-    AccessFlags, AnnotationItem, AnnotationSetItem, AnnotationVisibility, DexType, EncodedAnnotation, EncodedField, FieldIdItem
+    AnnotationItem, AnnotationSetItem, AnnotationVisibility, DexType, EncodedAnnotation,
 };
 use crate::dalvik::error::Result;
 
@@ -51,11 +51,7 @@ impl DexAnnotation {
 
     /// Decodes an encoded annotation object and returns a [DexAnnotation] object
     /// storing all resolved string and type references.
-    pub fn from_encoded(
-        encoded_annotation: &EncodedAnnotation,
-        dex: IDexRef<'_>,
-    ) -> Result<Self>
-    {
+    pub fn from_encoded(encoded_annotation: &EncodedAnnotation, dex: IDexRef<'_>) -> Result<Self> {
         let mut annotation = DexAnnotation {
             type_: dex.get_type(encoded_annotation.type_idx.0)?.clone(),
             values: HashMap::with_capacity(encoded_annotation.elements.len()),
@@ -82,10 +78,7 @@ impl DexAnnotation {
         Ok(annotations)
     }
 
-    pub fn read_set_into<R>(
-        dex: &mut Dex<'_, R>,
-        target: &mut Vec<DexAnnotation>,
-    ) -> Result<()>
+    pub fn read_set_into<R>(dex: &mut Dex<'_, R>, target: &mut Vec<DexAnnotation>) -> Result<()>
     where
         R: Read + Seek,
     {
@@ -102,7 +95,4 @@ impl DexAnnotation {
     pub fn get(&self, name: &String) -> Option<&DexValue> {
         self.values.get(name)
     }
-
-
-
 }
