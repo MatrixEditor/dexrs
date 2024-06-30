@@ -1,5 +1,5 @@
 use super::encoded_value::{EncodedField, EncodedMethod};
-use super::types::*;
+use super::{types::*, EncodedCatchHandlerList};
 use binrw::meta::{EndianKind, ReadEndian};
 use binrw::{binrw, BinRead, Endian};
 use std::io;
@@ -382,9 +382,9 @@ pub struct CodeItem {
     pub tries: Vec<TryItem>,
     // bytes representing a list of lists of catch types and associated
     // handler addresses.
-    // #[br(if(tries_size != 0))]
-    // #[bw(if(*tries_size != 0))]
-    // pub handlers: EncodedCatchHandlerList,
+    #[br(if(tries_size != 0))]
+    // // #[bw(if(*tries_size != 0))]
+    pub handlers: Option<EncodedCatchHandlerList>,
 }
 
 #[binrw]

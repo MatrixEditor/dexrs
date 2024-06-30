@@ -249,10 +249,10 @@ pub struct Insn {
 }
 
 type IFormatFactory = dyn Fn(&mut Cursor<&[u8]>, &mut Insn, IDexRef<'_>) -> Result<InsnFormat>;
-//                    \____/ \________________/  \____________________/     \________________/ - The function returns an instance of
-//                      |            |                     |                                     InsnFormat type with all parsed data
-//                      |            |                     |
-//                      |            |                     +------------------------------------ Mutable reference to the current DEX
+//                    \____/ \________________/             \_________/     \________________/ - The function returns an instance of
+//                      |            |                           |                               InsnFormat type with all parsed data
+//                      |            |                           |
+//                      |            |                           +------------------------------ Mutable reference to the current DEX
 //                      |            |                                                           file to resolve possible index refs
 //                      |            |
 //                      |            +---------------------------------------------------------- A mutable reference to the code pointer
@@ -624,11 +624,7 @@ pub const OPCODES: &[Opcode] = &[
 
 /// pseudo-format used for unused opcodes; suggested for use as the nominal
 /// format for a breakpoint opcode
-pub fn format_00x(
-    _: &mut Cursor<&'_ [u8]>,
-    _: &mut Insn,
-    _: IDexRef<'_>,
-) -> Result<InsnFormat> {
+pub fn format_00x(_: &mut Cursor<&'_ [u8]>, _: &mut Insn, _: IDexRef<'_>) -> Result<InsnFormat> {
     Ok(InsnFormat::Format00x)
 }
 
@@ -658,11 +654,7 @@ pub fn format_10x(
 /// ID: 12x
 /// Syntax: `op vA, vB`
 /// Format: `B|A|op`
-pub fn format_12x(
-    code: &mut Cursor<&'_ [u8]>,
-    _: &mut Insn,
-    _: IDexRef<'_>,
-) -> Result<InsnFormat> {
+pub fn format_12x(code: &mut Cursor<&'_ [u8]>, _: &mut Insn, _: IDexRef<'_>) -> Result<InsnFormat> {
     let value = code.read_u16::<LittleEndian>()?;
     Ok(InsnFormat::Format12x {
         a: ((value & 0x0F00) >> 8) as u8,
@@ -673,11 +665,7 @@ pub fn format_12x(
 /// ID: 11n
 /// Syntax: `op vA, #+B`
 /// Format: `B|A|op`
-pub fn format_11n(
-    code: &mut Cursor<&'_ [u8]>,
-    _: &mut Insn,
-    _: IDexRef<'_>,
-) -> Result<InsnFormat> {
+pub fn format_11n(code: &mut Cursor<&'_ [u8]>, _: &mut Insn, _: IDexRef<'_>) -> Result<InsnFormat> {
     let value = code.read_u16::<LittleEndian>()?;
     Ok(InsnFormat::Format11n {
         a: ((value & 0x0F00) >> 8) as u8,
@@ -688,11 +676,7 @@ pub fn format_11n(
 /// ID: 11x
 /// Syntax: `op vAA`
 /// Format: `AA|op`
-pub fn format_11x(
-    code: &mut Cursor<&'_ [u8]>,
-    _: &mut Insn,
-    _: IDexRef<'_>,
-) -> Result<InsnFormat> {
+pub fn format_11x(code: &mut Cursor<&'_ [u8]>, _: &mut Insn, _: IDexRef<'_>) -> Result<InsnFormat> {
     let value = code.read_u16::<LittleEndian>()?;
     Ok(InsnFormat::Format11x {
         a: ((value & 0xFF00) >> 8) as u8,
@@ -702,11 +686,7 @@ pub fn format_11x(
 /// ID: 10t
 /// Syntax: `op +AA`
 /// Format: `AA|op`
-pub fn format_10t(
-    code: &mut Cursor<&'_ [u8]>,
-    _: &mut Insn,
-    _: IDexRef<'_>,
-) -> Result<InsnFormat> {
+pub fn format_10t(code: &mut Cursor<&'_ [u8]>, _: &mut Insn, _: IDexRef<'_>) -> Result<InsnFormat> {
     let value = code.read_u16::<LittleEndian>()?;
     Ok(InsnFormat::Format10t {
         a: ((value & 0xFF00) >> 8) as i8,
@@ -716,11 +696,7 @@ pub fn format_10t(
 /// ID: 20t
 /// Syntax: `op +AAAA`
 /// Format: `||op AAAA`
-pub fn format_20t(
-    code: &mut Cursor<&'_ [u8]>,
-    _: &mut Insn,
-    _: IDexRef<'_>,
-) -> Result<InsnFormat> {
+pub fn format_20t(code: &mut Cursor<&'_ [u8]>, _: &mut Insn, _: IDexRef<'_>) -> Result<InsnFormat> {
     code.seek(std::io::SeekFrom::Current(2))?;
     Ok(InsnFormat::Format20t {
         a: code.read_i16::<LittleEndian>()?,
@@ -746,11 +722,7 @@ pub fn format_20bc(
 /// ID: 22x
 /// Syntax: `op vAA, vBBBB`
 /// Format: `AA|op BBBB`
-pub fn format_22x(
-    code: &mut Cursor<&'_ [u8]>,
-    _: &mut Insn,
-    _: IDexRef<'_>,
-) -> Result<InsnFormat> {
+pub fn format_22x(code: &mut Cursor<&'_ [u8]>, _: &mut Insn, _: IDexRef<'_>) -> Result<InsnFormat> {
     let value = code.read_u16::<LittleEndian>()?;
     Ok(InsnFormat::Format22x {
         a: ((value & 0xFF00) >> 8) as u8,
@@ -761,11 +733,7 @@ pub fn format_22x(
 /// ID: 21t
 /// Syntax: `op vAA, +BBBB`
 /// Format: `AA|op BBBB`
-pub fn format_21t(
-    code: &mut Cursor<&'_ [u8]>,
-    _: &mut Insn,
-    _: IDexRef<'_>,
-) -> Result<InsnFormat> {
+pub fn format_21t(code: &mut Cursor<&'_ [u8]>, _: &mut Insn, _: IDexRef<'_>) -> Result<InsnFormat> {
     let value = code.read_u16::<LittleEndian>()?;
     Ok(InsnFormat::Format21t {
         a: ((value & 0xFF00) >> 8) as u8,
@@ -776,11 +744,7 @@ pub fn format_21t(
 /// ID: 21s
 /// Syntax: `op vAA, #+BBBB`
 /// Format: `AA|op BBBB`
-pub fn format_21s(
-    code: &mut Cursor<&'_ [u8]>,
-    _: &mut Insn,
-    _: IDexRef<'_>,
-) -> Result<InsnFormat> {
+pub fn format_21s(code: &mut Cursor<&'_ [u8]>, _: &mut Insn, _: IDexRef<'_>) -> Result<InsnFormat> {
     let value = code.read_u16::<LittleEndian>()?;
     Ok(InsnFormat::Format21s {
         a: ((value & 0xFF00) >> 8) as u8,
@@ -791,11 +755,7 @@ pub fn format_21s(
 /// ID: 21h
 /// Syntax: `op vAA, #+BBBB0000`
 /// Format: `AA|op BBBB`
-pub fn format_21h(
-    code: &mut Cursor<&'_ [u8]>,
-    _: &mut Insn,
-    _: IDexRef<'_>,
-) -> Result<InsnFormat> {
+pub fn format_21h(code: &mut Cursor<&'_ [u8]>, _: &mut Insn, _: IDexRef<'_>) -> Result<InsnFormat> {
     let value = code.read_u16::<LittleEndian>()?;
     let index_value = code.read_u16::<LittleEndian>()?;
     Ok(InsnFormat::Format21h {
@@ -862,11 +822,7 @@ pub fn format_21c(
 /// ID: 23x
 /// Syntax: `op vAA, vBB, vCC`
 /// Format: `AA|op CC|BB`
-pub fn format_23x(
-    code: &mut Cursor<&'_ [u8]>,
-    _: &mut Insn,
-    _: IDexRef<'_>,
-) -> Result<InsnFormat> {
+pub fn format_23x(code: &mut Cursor<&'_ [u8]>, _: &mut Insn, _: IDexRef<'_>) -> Result<InsnFormat> {
     let value = code.read_u16::<LittleEndian>()?;
     let next = code.read_u16::<LittleEndian>()?;
     Ok(InsnFormat::Format23x {
@@ -879,11 +835,7 @@ pub fn format_23x(
 /// ID: 22b
 /// Syntax: `op vAA, vBB, +#CC`
 /// Format: `AA|op CC|BB`
-pub fn format_22b(
-    code: &mut Cursor<&'_ [u8]>,
-    _: &mut Insn,
-    _: IDexRef<'_>,
-) -> Result<InsnFormat> {
+pub fn format_22b(code: &mut Cursor<&'_ [u8]>, _: &mut Insn, _: IDexRef<'_>) -> Result<InsnFormat> {
     let value = code.read_u16::<LittleEndian>()?;
     let next = code.read_u16::<LittleEndian>()?;
     Ok(InsnFormat::Format22b {
@@ -896,11 +848,7 @@ pub fn format_22b(
 /// ID: 22t
 /// Syntax: `op vA, vB, +CCCC`
 /// Format: `B|A|op CCCCC`
-pub fn format_22t(
-    code: &mut Cursor<&'_ [u8]>,
-    _: &mut Insn,
-    _: IDexRef<'_>,
-) -> Result<InsnFormat> {
+pub fn format_22t(code: &mut Cursor<&'_ [u8]>, _: &mut Insn, _: IDexRef<'_>) -> Result<InsnFormat> {
     let value = code.read_u16::<LittleEndian>()?;
     let next = code.read_u16::<LittleEndian>()?;
     Ok(InsnFormat::Format22t {
@@ -913,11 +861,7 @@ pub fn format_22t(
 /// ID: 22s
 /// Syntax: `op vA, vB, #+CCCC`
 /// Format: `B|A|op CCCCC`
-pub fn format_22s(
-    code: &mut Cursor<&'_ [u8]>,
-    _: &mut Insn,
-    _: IDexRef<'_>,
-) -> Result<InsnFormat> {
+pub fn format_22s(code: &mut Cursor<&'_ [u8]>, _: &mut Insn, _: IDexRef<'_>) -> Result<InsnFormat> {
     let value = code.read_u16::<LittleEndian>()?;
     let next = code.read_u16::<LittleEndian>()?;
     Ok(InsnFormat::Format22s {
@@ -954,11 +898,7 @@ pub fn format_22c(
 /// ID: 30t
 /// Syntax: `op +AAAAAAAA`
 /// Format: `||op AAAA_lo AAAA_hi`
-pub fn format_30t(
-    code: &mut Cursor<&'_ [u8]>,
-    _: &mut Insn,
-    _: IDexRef<'_>,
-) -> Result<InsnFormat> {
+pub fn format_30t(code: &mut Cursor<&'_ [u8]>, _: &mut Insn, _: IDexRef<'_>) -> Result<InsnFormat> {
     code.seek(std::io::SeekFrom::Current(2))?;
     Ok(InsnFormat::Format30t {
         // index 0 is where the opcode is stored
@@ -969,11 +909,7 @@ pub fn format_30t(
 /// ID: 32x
 /// Syntax: `op vAAAA, vBBBB`
 /// Format: `||op AAAA BBBB`
-pub fn format_32x(
-    code: &mut Cursor<&'_ [u8]>,
-    _: &mut Insn,
-    _: IDexRef<'_>,
-) -> Result<InsnFormat> {
+pub fn format_32x(code: &mut Cursor<&'_ [u8]>, _: &mut Insn, _: IDexRef<'_>) -> Result<InsnFormat> {
     code.seek(std::io::SeekFrom::Current(2))?;
     Ok(InsnFormat::Format32x {
         a: code.read_u16::<LittleEndian>()?,
@@ -984,11 +920,7 @@ pub fn format_32x(
 /// ID: 31i
 /// Syntax: `op vAA, #+BBBBBBBB`
 /// Format: `AA|op BBBB_lo BBBB_hi`
-pub fn format_31i(
-    code: &mut Cursor<&'_ [u8]>,
-    _: &mut Insn,
-    _: IDexRef<'_>,
-) -> Result<InsnFormat> {
+pub fn format_31i(code: &mut Cursor<&'_ [u8]>, _: &mut Insn, _: IDexRef<'_>) -> Result<InsnFormat> {
     let value = code.read_u16::<LittleEndian>()?;
     let index = code.read_i32::<LittleEndian>()?;
     Ok(InsnFormat::Format31i {
@@ -1000,11 +932,7 @@ pub fn format_31i(
 /// ID: 31t
 /// Syntax: `op: vAA, +BBBBBBBB`
 /// Format: `AA|op BBBB_lo BBBB_hi`
-pub fn format_31t(
-    code: &mut Cursor<&'_ [u8]>,
-    _: &mut Insn,
-    _: IDexRef<'_>,
-) -> Result<InsnFormat> {
+pub fn format_31t(code: &mut Cursor<&'_ [u8]>, _: &mut Insn, _: IDexRef<'_>) -> Result<InsnFormat> {
     let value = code.read_u16::<LittleEndian>()?;
     let b = code.read_i32::<LittleEndian>()?;
     Ok(InsnFormat::Format31t {
@@ -1021,7 +949,6 @@ pub fn format_31c(
     _: &mut Insn,
     dex: IDexRef<'_>,
 ) -> Result<InsnFormat> {
-    // note: same as 31i
     let a = code.read_u16::<LittleEndian>()?;
     let index = code.read_u32::<LittleEndian>()?;
     Ok(InsnFormat::Format31c {
@@ -1079,7 +1006,7 @@ pub fn format_3rc(
     let c = code.read_u16::<LittleEndian>()?;
 
     let n = (c + count) - 1;
-    Ok( InsnFormat::Format3rc {
+    Ok(InsnFormat::Format3rc {
         a: count as u8,
         b: match value & 0xFF {
             0x25 /* filled-new-array/range */ => {

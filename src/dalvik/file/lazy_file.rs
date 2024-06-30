@@ -361,7 +361,7 @@ impl<'a, R: Read + Seek> IDex for Dex<'a, R> {
         if !self.classes.contains_key(&index) {
             let offset = check_index!(
                 index,
-                item_size = 8,
+                item_size = 32,
                 self.header.class_defs_size,
                 self.header.class_defs_off
             );

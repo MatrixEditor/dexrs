@@ -1,5 +1,5 @@
 use crate::dalvik::dex::{
-    AccessFlags, AnnotationSetRefList, CodeItem, DebugInfoItem, DexType, EncodedMethod, ULeb128p1,
+    AccessFlags, AnnotationSetRefList, CodeItem, DebugInfoItem, DexType, EncodedMethod, SLeb128, ULeb128, ULeb128p1
 };
 use crate::dalvik::error::Result;
 use crate::dalvik::insns::{self, Insn};
@@ -104,12 +104,9 @@ impl DexMethod {
         // of the previous item, and to calculate the method_ids index the difference
         // must be incremented to the previous method_idx_diff values.
         let index = prev_diff + encoded_method.method_idx_diff.0;
-        println!("index: {}", index);
         let method_item = dex.get_method(index)?;
-        println!("method_item: {:?}", method_item);
 
         let proto = dex.get_proto(method_item.proto_idx as u32)?;
-        println!("proto: {:?}", proto);
         let mut parameters: Vec<DexParameter> = proto
             .parameters
             .iter()

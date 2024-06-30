@@ -298,7 +298,7 @@ pub struct EncodedCatchHandler {
 
     /// stream of `abs(size)` encoded items, one for each caught type, in the order that
     /// the types should be tested.
-    #[br(count = size.0.abs())]
+    #[br(count = if size.0 != 0 { size.0.abs() } else { 0 })]
     pub handlers: Vec<EncodedTypeAddrPair>,
 
     /// bytecode address of the catch-all handler. This element is only present if size
@@ -309,15 +309,14 @@ pub struct EncodedCatchHandler {
 
 #[binrw]
 #[brw(little)]
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct EncodedCatchHandlerList {
     /// the number of entries in this list
-    #[bw(calc = ULeb128(list.len() as u32))]
     pub size: ULeb128,
 
-    /// elements of this list
-    #[br(count = size.0 as usize)]
-    pub list: Vec<EncodedCatchHandler>,
+    // elements of this list
+    // #[br(count = size.0 as usize)]
+    // pub list: Vec<EncodedCatchHandler>,
 }
 
 #[binrw]

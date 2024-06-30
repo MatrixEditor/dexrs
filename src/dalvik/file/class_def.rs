@@ -4,6 +4,7 @@ use crate::dalvik::{
 };
 
 use binrw::BinRead;
+use byteorder::{LittleEndian, ReadBytesExt};
 use std::{
     collections::{btree_map::Values, BTreeMap},
     fmt::Debug,
