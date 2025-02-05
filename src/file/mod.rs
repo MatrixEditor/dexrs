@@ -12,6 +12,8 @@ pub mod modifiers;
 pub use modifiers::*;
 pub mod instruction;
 pub use instruction::*;
+pub mod code_item_accessors;
+pub use code_item_accessors::*;
 
 use crate::{dex_err, error::DexError, leb128::decode_leb128, utf, Result};
 
@@ -296,6 +298,17 @@ impl<'a> DexFile<'a> {
     pub fn get_code_item(&self, offset: u32) -> Result<Option<&'a CodeItem>> {
         check_lt_result!(offset, self.file_size(), "code item offset");
         self.data_ptr(offset)
+    }
+
+    #[inline(always)]
+    pub fn get_code_item_accessor(&self, offset: u32) -> Result<CodeItemAccessor<'_>> {
+        check_lt_result!(offset, self.file_size(), "code item offset");
+        let code_item = self.non_null_data_ptr(offset)?;
+        CodeItemAccessor::from_code_item(
+            &self,
+            code_item,
+            offset + std::mem::size_of::<CodeItem>() as u32,
+        )
     }
 
     #[inline(always)]
