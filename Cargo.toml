@@ -1,13 +1,12 @@
 [package]
 name = "dexrs"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 
 [dependencies]
 adler32 = "1.2.0"
-binrw = "0.13.3"
-bitflags = "2.5.0"
-byteorder = "1.5.0"
-lazy_static = "1.4.0"
-leb128 = "0.2.5"
+memmap2 = "0.9.5"
 openssl = "0.10.64"
+plain = "0.2.3"
+thiserror = "2.0.11"
+varint-simd = "0.4.1"
