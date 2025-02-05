@@ -1,0 +1,573 @@
+use memmap2::{Mmap, MmapAsRawDesc};
+use plain::Plain;
+
+pub mod structs;
+pub use structs::*;
+pub mod header;
+pub use header::*;
+pub mod class_accessor;
+pub mod verifier;
+pub use class_accessor::*;
+pub mod modifiers;
+pub use modifiers::*;
+pub mod instruction;
+pub use instruction::*;
+
+use crate::{dex_err, error::DexError, leb128::decode_leb128, utf, Result};
+
+pub const DEX_MAGIC: &[u8] = b"dex\n";
+pub const DEX_MAGIC_VERSIONS: &[&[u8]] = &[
+    b"035\0", b"037\0", // Dex version 038: Android "O" and beyond.
+    b"038\0", // Dex version 039: Android "P" and beyond.
+    b"039\0", // Dex version 040: Android "Q" and beyond (aka Android 10).
+    b"040\0", // Dex version 041: Android "V" and beyond (aka Android 15).
+    b"041\0",
+];
+
+pub const DEX_ENDIAN_CONSTANT: u32 = 0x12345678;
+
+pub struct DexFileContainer {
+    mmap: memmap2::Mmap,
+    location: String,
+    pub verify: bool,
+    pub verify_checksum: bool,
+}
+
+impl DexFileContainer {
+    pub fn new<T>(file: T) -> Self
+    where
+        T: MmapAsRawDesc,
+    {
+        Self {
+            mmap: unsafe { memmap2::Mmap::map(file).unwrap() },
+            verify: false,
+            verify_checksum: false,
+            location: "[anonymous]".to_string(),
+        }
+    }
+
+    pub fn location(&mut self, location: String) -> &mut Self {
+        self.location = location;
+        self
+    }
+
+    pub fn verify(mut self, verify: bool) -> Self {
+        self.verify = verify;
+        self
+    }
+
+    pub fn verify_checksum(mut self, verify_checksum: bool) -> Self {
+        self.verify_checksum = verify_checksum;
+        self
+    }
+
+    pub fn open(&self) -> Result<DexFile<'_>> {
+        DexFile::open(self)
+    }
+
+    pub fn get_location(&self) -> &str {
+        &self.location
+    }
+
+    pub fn data(&self) -> &memmap2::Mmap {
+        &self.mmap
+    }
+}
+
+pub struct DexFile<'a> {
+    mmap: &'a memmap2::Mmap,
+    header: &'a Header,
+
+    string_ids: &'a [StringId],
+    type_ids: &'a [TypeId],
+    field_ids: &'a [FieldId],
+    proto_ids: &'a [ProtoId],
+    method_ids: &'a [MethodId],
+    class_defs: &'a [ClassDef],
+    method_handles: &'a [MethodHandleItem],
+    call_site_ids: &'a [CallSiteIdItem],
+
+    hiddenapi_data: Option<&'a HiddenapiClassData<'a>>,
+
+    location: String,
+}
+
+macro_rules! check_lt {
+    ($idx:expr, $count:expr, $item_ty:tt) => {
+        if $idx >= $count {
+            panic!(
+                "Index({}) of {} is bigger than maximum({})",
+                $idx,
+                stringify!($item_ty),
+                $count
+            );
+        }
+    };
+}
+
+macro_rules! check_lt_result {
+    ($idx:expr, $count:expr, $item_ty:tt) => {
+        if ($idx as usize) >= ($count as usize) {
+            return dex_err!(DexIndexError {
+                index: $idx as u32,
+                item_ty: stringify!($item_ty),
+                max: $count as usize,
+            });
+        }
+    };
+}
+
+impl<'a> DexFile<'a> {
+    pub fn get_section<T: Plain>(base: &'a Mmap, offset: u32, len: u32) -> &'a [T] {
+        let size = base.len();
+        if size < std::mem::size_of::<Header>() || len == 0 {
+            return &[];
+        }
+
+        let data = &base[offset as usize..];
+        match T::slice_from_bytes_len(data, len as usize) {
+            Ok(slice) => slice,
+            Err(_) => &[],
+        }
+    }
+
+    pub fn from_raw_parts(base: &'a Mmap, location: &str) -> Self {
+        let header = Header::from_bytes(&base).unwrap();
+        let mut dex = Self {
+            mmap: base,
+            header,
+            string_ids: DexFile::get_section(base, header.string_ids_off, header.string_ids_size),
+            type_ids: DexFile::get_section(base, header.type_ids_off, header.type_ids_size),
+            field_ids: DexFile::get_section(base, header.field_ids_off, header.field_ids_size),
+            proto_ids: DexFile::get_section(base, header.proto_ids_off, header.proto_ids_size),
+            method_ids: DexFile::get_section(base, header.method_ids_off, header.method_ids_size),
+            class_defs: DexFile::get_section(base, header.class_defs_off, header.class_defs_size),
+            method_handles: &[],
+            call_site_ids: &[],
+            hiddenapi_data: None,
+            location: location.to_string(),
+        };
+
+        if dex.file_size() < std::mem::size_of::<Header>() {
+            return dex; // don't parse data
+        }
+
+        dex.init_sections_from_maplist();
+        dex
+    }
+
+    pub fn open(container: &DexFileContainer) -> Result<DexFile<'_>> {
+        let loc = container.get_location();
+        let size = container.data().len();
+        if size < std::mem::size_of::<Header>() {
+            return dex_err!(DexFileError, "Invalid or truncated file {:?}", loc);
+        }
+
+        let dex = DexFile::from_raw_parts(container.data(), &loc);
+        dex.init()?;
+        if container.verify {
+            DexFile::verify(&dex, container.verify_checksum)?;
+        }
+        Ok(dex)
+    }
+
+    pub fn expected_header_size(&self) -> u32 {
+        let version = self.header.get_version();
+        if version != 0 {
+            if version < 41 {
+                std::mem::size_of::<Header>() as u32
+            } else {
+                std::mem::size_of::<HeaderV41>() as u32
+            }
+        } else {
+            0
+        }
+    }
+
+    pub fn get_location(&self) -> &str {
+        &self.location
+    }
+
+    #[inline(always)]
+    pub fn file_size(&self) -> usize {
+        self.mmap.len()
+    }
+
+    // -- strings
+    #[inline(always)]
+    pub fn get_string_id(&self, idx: u32) -> Result<&'a StringId> {
+        check_lt_result!(idx, self.num_string_ids(), StringId);
+        Ok(&self.string_ids[idx as usize])
+    }
+
+    #[inline(always)]
+    pub fn string_ids(&self) -> &'a [StringId] {
+        self.string_ids
+    }
+
+    #[inline(always)]
+    pub fn num_string_ids(&self) -> u32 {
+        self.header.string_ids_size
+    }
+
+    #[inline]
+    pub fn get_string_data(&self, string_id: &StringId) -> Result<(u32, &'a [u8])> {
+        check_lt_result!(string_id.offset(), self.file_size(), "string-id");
+        let (utf16_len, size) = decode_leb128(&self.mmap[string_id.offset()..]);
+
+        let start = string_id.offset() + size;
+        check_lt_result!(start, self.file_size(), "string-data");
+        match &self.mmap[start..].iter().position(|x| *x == 0) {
+            Some(pos) => Ok((utf16_len, &self.mmap[start..start + pos + 1])),
+            None => dex_err!(BadStringData, start),
+        }
+    }
+
+    #[inline(always)]
+    pub fn get_utf16_str_lossy(&self, string_id: &StringId) -> Result<String> {
+        let (_, data) = self.get_string_data(string_id)?;
+        Ok(utf::mutf8_to_str_lossy(data))
+    }
+
+    #[inline(always)]
+    pub fn get_utf16_str_lossy_at(&self, idx: u32) -> Result<String> {
+        let string_id = self.get_string_id(idx)?;
+        self.get_utf16_str_lossy(string_id)
+    }
+
+    #[inline(always)]
+    pub fn get_utf16_str(&self, string_id: &StringId) -> Result<String> {
+        let (_, data) = self.get_string_data(string_id)?;
+        crate::utf::mutf8_to_str(data)
+    }
+
+    #[inline(always)]
+    pub fn get_utf16_str_at(&self, idx: u32) -> Result<String> {
+        let string_id = self.get_string_id(idx)?;
+        self.get_utf16_str(string_id)
+    }
+
+    // -- types
+    #[inline(always)]
+    pub fn get_type_id(&self, idx: TypeIndex) -> Result<&'a TypeId> {
+        check_lt_result!(idx as u32, self.num_type_ids(), TypeId);
+        Ok(&self.type_ids[idx as usize])
+    }
+
+    #[inline(always)]
+    pub fn num_type_ids(&self) -> u32 {
+        self.header.type_ids_size
+    }
+
+    #[inline(always)]
+    pub fn get_type_ids(&self) -> &'a [TypeId] {
+        self.type_ids
+    }
+
+    pub fn get_type_desc(&self, type_id: &TypeId) -> Result<(u32, &'a [u8])> {
+        self.get_string_data(self.get_string_id(type_id.descriptor_idx)?)
+    }
+
+    pub fn get_type_desc_at(&self, idx: TypeIndex) -> Result<(u32, &'a [u8])> {
+        let type_id = self.get_type_id(idx)?;
+        self.get_string_data(self.get_string_id(type_id.descriptor_idx)?)
+    }
+
+    pub fn get_type_desc_utf16_lossy_at(&self, idx: TypeIndex) -> Result<String> {
+        let type_id = self.get_type_id(idx)?;
+        self.get_utf16_str_lossy_at(type_id.descriptor_idx)
+    }
+
+    pub fn get_type_desc_utf16_lossy(&self, type_id: &TypeId) -> Result<String> {
+        self.get_utf16_str_lossy_at(type_id.descriptor_idx)
+    }
+
+    pub fn get_type_desc_utf16(&self, type_id: &TypeId) -> Result<String> {
+        self.get_utf16_str_at(type_id.descriptor_idx)
+    }
+
+    pub fn get_type_desc_utf16_at(&self, idx: TypeIndex) -> Result<String> {
+        let type_id = self.get_type_id(idx)?;
+        self.get_utf16_str_at(type_id.descriptor_idx)
+    }
+
+    // -- code item
+    #[inline(always)]
+    pub fn get_code_item(&self, offset: u32) -> Result<Option<&'a CodeItem>> {
+        check_lt_result!(offset, self.file_size(), "code item offset");
+        self.data_ptr(offset)
+    }
+
+    #[inline(always)]
+    pub fn get_insns_raw(&self, code_off: u32, size_in_code_units: u32) -> Result<&'a [u16]> {
+        check_lt_result!(code_off, self.file_size(), "code stream offset");
+        self.non_null_array_data_ptr(code_off, size_in_code_units as usize)
+    }
+
+    // -- fields
+    #[inline]
+    pub fn get_field_id(&self, idx: u32) -> Result<&'a FieldId> {
+        check_lt_result!(idx, self.header.field_ids_size, FieldId);
+        Ok(&self.field_ids[idx as usize])
+    }
+
+    #[inline(always)]
+    pub fn get_field_ids(&self) -> &'a [FieldId] {
+        self.field_ids
+    }
+
+    // Proto related methods
+    pub fn get_proto_id(&self, idx: u32) -> &'a ProtoId {
+        check_lt!(idx, self.header.proto_ids_size, ProtoId);
+        &self.proto_ids[idx as usize]
+    }
+
+    pub fn num_proto_ids(&self) -> u32 {
+        self.header.proto_ids_size
+    }
+
+    pub fn get_proto_ids(&self) -> &'a [ProtoId] {
+        self.proto_ids
+    }
+
+    // method ids related methods
+    #[inline(always)]
+    pub fn get_method_id(&self, idx: u32) -> Result<&'a MethodId> {
+        check_lt_result!(idx, self.header.method_ids_size, MethodId);
+        Ok(&self.method_ids[idx as usize])
+    }
+
+    #[inline(always)]
+    pub fn num_method_ids(&self) -> u32 {
+        self.header.method_ids_size
+    }
+
+    #[inline(always)]
+    pub fn get_method_ids(&self) -> &'a [MethodId] {
+        self.method_ids
+    }
+
+    // classdef related methods
+    #[inline(always)]
+    pub fn get_class_def(&self, idx: u32) -> &'a ClassDef {
+        check_lt!(idx, self.header.class_defs_size, ClassDef);
+        &self.class_defs[idx as usize]
+    }
+
+    #[inline(always)]
+    pub fn num_class_defs(&self) -> u32 {
+        self.header.class_defs_size
+    }
+
+    #[inline(always)]
+    pub fn get_class_defs(&self) -> &'a [ClassDef] {
+        self.class_defs
+    }
+
+    #[inline]
+    pub fn get_class_desc(&self, class_def: &ClassDef) -> Result<(u32, &'a [u8])> {
+        self.get_type_desc_at(class_def.class_idx)
+    }
+
+    #[inline]
+    pub fn get_class_desc_utf16_lossy(&self, class_def: &ClassDef) -> Result<String> {
+        self.get_type_desc_utf16_lossy_at(class_def.class_idx)
+    }
+
+    #[inline]
+    pub fn get_class_desc_utf16(&self, class_def: &ClassDef) -> Result<String> {
+        self.get_type_desc_utf16_at(class_def.class_idx)
+    }
+
+    #[inline]
+    pub fn get_interfaces_list(&self, class_def: &ClassDef) -> Result<Option<TypeList<'a>>> {
+        self.get_type_list(class_def.interfaces_off)
+    }
+
+    // type list related methods
+    #[inline(always)]
+    pub fn get_type_list(&self, offset: u32) -> Result<Option<TypeList<'a>>> {
+        if offset == 0 {
+            return Ok(None);
+        }
+
+        check_lt_result!(offset, self.file_size(), TypeList);
+        let length = u32::from_bytes(&self.mmap[offset as usize..]).unwrap();
+        let data_off = offset + std::mem::size_of::<u32>() as u32;
+
+        self.array_data_ptr(data_off, *length as usize)
+    }
+
+    // private methods
+    #[inline]
+    fn data_ptr<T: Plain>(&self, offset: u32) -> Result<Option<&'a T>> {
+        match offset {
+            0 => Ok(None),
+            _ => Ok(Some(self.non_null_data_ptr(offset)?)),
+        }
+    }
+
+    #[inline]
+    fn non_null_data_ptr<T: Plain>(&self, offset: u32) -> Result<&'a T> {
+        if offset == 0 {
+            panic!(
+                "Attempted to read a null pointer for data type {:?}.",
+                std::any::type_name::<T>()
+            );
+        }
+        match T::from_bytes(&self.mmap[offset as usize..]) {
+            Ok(v) => Ok(&v),
+            Err(plain::Error::TooShort) => {
+                dex_err!(DexLayoutError, self, offset, std::any::type_name::<T>(), 0)
+            }
+            Err(err) => panic!(
+                "Error decoding data type {:?}: {:?}",
+                std::any::type_name::<T>(),
+                err
+            ),
+        }
+    }
+
+    #[inline]
+    fn array_data_ptr<T: Plain>(&self, offset: u32, len: usize) -> Result<Option<&'a [T]>> {
+        match offset {
+            0 => Ok(None),
+            _ => Ok(Some(self.non_null_array_data_ptr(offset, len)?)),
+        }
+    }
+
+    #[inline]
+    fn non_null_array_data_ptr<T: Plain>(&self, offset: u32, len: usize) -> Result<&'a [T]> {
+        if offset == 0 {
+            panic!(
+                "Attempted to read a null pointer for data type {:?}.",
+                std::any::type_name::<T>()
+            );
+        }
+        match T::slice_from_bytes_len(&self.mmap[offset as usize..], len) {
+            Ok(v) => Ok(&v),
+            Err(plain::Error::TooShort) => dex_err!(
+                DexLayoutError,
+                self,
+                offset,
+                std::any::type_name::<T>(),
+                len
+            ),
+            Err(plain::Error::BadAlignment) => todo!(),
+        }
+    }
+
+    fn init(&self) -> Result<()> {
+        let container_size = self.file_size();
+        if container_size < std::mem::size_of::<Header>() {
+            return dex_err!(
+                DexFileError,
+                "Unable to open {:?}: File size is too small to fit dex header",
+                self.location
+            );
+        }
+
+        self.check_magic_and_version()?;
+
+        let expected_header_size = self.expected_header_size();
+        if expected_header_size < self.header.header_size {
+            return dex_err!(
+                DexFileError,
+                "Unable to open {:?}: Header size is {} but {} was expected",
+                self.location,
+                expected_header_size,
+                self.header.header_size
+            );
+        }
+
+        if container_size < self.header.file_size as usize {
+            return dex_err!(
+                DexFileError,
+                "Unable to open {:?}: File size is {} but the header expects {}",
+                self.location,
+                container_size,
+                self.header.file_size
+            );
+        }
+        Ok(())
+    }
+
+    fn check_magic_and_version(&self) -> Result<()> {
+        if !self.is_magic_valid() {
+            return dex_err!(
+                DexFileError,
+                "Unrecognized magic number in {:?}: {:?}",
+                self.location,
+                &self.header.get_magic()[..4]
+            );
+        }
+
+        if !self.is_version_valid() {
+            return dex_err!(
+                DexFileError,
+                "Unrecognized dex version in {:?}: {:?}",
+                self.location,
+                &self.header.get_magic()[4..]
+            );
+        }
+        Ok(())
+    }
+
+    fn init_sections_from_maplist(&mut self) {
+        if self.header.map_off == 0x00
+            || self.header.map_off as usize > self.file_size() - std::mem::size_of::<MapList>()
+        {
+            // bad offset
+            return;
+        }
+
+        let map_list_size_off = self.header.map_off;
+        let map_list_off = self.header.map_off + std::mem::size_of::<u32>() as u32;
+        let count: &u32 = match self.non_null_data_ptr(map_list_size_off) {
+            Ok(v) => v,
+            Err(_) => {
+                // bad file will be reported through verifier
+                return;
+            }
+        };
+        let map_limit =
+            (self.file_size() - std::mem::size_of::<u32>() - map_list_size_off as usize)
+                / std::mem::size_of::<MapItem>();
+
+        if *count as usize > map_limit {
+            // bad file
+            return;
+        }
+
+        // we should unwrap this here
+        let items = match self.non_null_array_data_ptr::<MapItem>(map_list_off, *count as usize) {
+            Ok(v) => v,
+            Err(_) => {
+                // bad file will be reported through verifier
+                return;
+            }
+        };
+        for map_item in items {
+            match map_item.type_ {
+                MapItemType::MethodHandleItem => {
+                    self.method_handles =
+                        DexFile::get_section(&self.mmap, map_item.off, map_item.size)
+                }
+                MapItemType::CallSiteIdItem => {
+                    self.call_site_ids =
+                        DexFile::get_section(&self.mmap, map_item.off, map_item.size)
+                }
+                MapItemType::HiddenapiClassData => {
+                    let item_off = map_item.off as usize;
+                    self.hiddenapi_data = Some(
+                        HiddenapiClassData::from_bytes(
+                            &self.mmap[item_off..item_off + map_item.size as usize],
+                        )
+                        .unwrap(),
+                    );
+                }
+                _ => {}
+            }
+        }
+    }
+}
