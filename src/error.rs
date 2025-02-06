@@ -77,6 +77,13 @@ pub enum DexError {
         file_size: usize,
     },
 
+    #[error(
+        "Tries to access v{operand} of instruction {insn_name} which has no {operand} operand"
+    )]
+    OperandAccessError {
+        insn_name: &'static str,
+        operand: &'static str,
+    },
 }
 
 #[macro_export]

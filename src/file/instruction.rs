@@ -7,8 +7,8 @@ impl<'a> Instruction<'a> {
     }
 
     #[inline(always)]
-    pub fn relative_at(&self, offset: u32) -> Instruction<'_> {
-        Instruction::at(&self.0[offset as usize..])
+    pub fn relative_at(&self, offset: usize) -> Instruction<'a> {
+        Instruction::at(&self.0[offset..])
     }
 
     #[inline(always)]
@@ -41,11 +41,22 @@ impl<'a> Instruction<'a> {
         Instruction::format_desc_of(opcode).verify_flags
     }
 
+    pub const fn name_of(opcode: Code) -> &'static str {
+        Instruction::format_desc_of(opcode).name
+    }
+
+    #[inline(always)]
+    pub const fn opcode_of(inst_data: u16) -> Code {
+        // this will always return a valid result as we are limiting the
+        // input to 0xFF
+        Instruction::INSN_DESCRIPTORS[(inst_data & 0xFF) as usize].opcode
+    }
+
     #[inline]
     const fn code_size_in_code_units_by_opcode(opcode: Code, format: Format) -> u8 {
         let format_idx = format as u8;
         if opcode as u8 == Code::NOP as u8 {
-            0xFF // will point to complex type
+            code_flags::Complex // will point to complex type
         } else if format_idx >= Format::k10x as u8 && format_idx <= Format::k10t as u8 {
             1
         } else if format_idx >= Format::k20t as u8 && format_idx <= Format::k22c as u8 {
@@ -57,7 +68,7 @@ impl<'a> Instruction<'a> {
         } else if format_idx == Format::k51l as u8 {
             5
         } else {
-            0xFF
+            code_flags::Custom
         }
     }
 }
@@ -117,6 +128,20 @@ pub enum IndexType {
 
 #[rustfmt::skip]
 #[allow(non_upper_case_globals)]
+pub mod code_flags {
+    pub const Complex: u8 = 0xFF;
+    pub const Custom: u8  = 0xFE;
+}
+
+#[rustfmt::skip]
+#[allow(non_upper_case_globals)]
+pub mod signatures {
+    pub const PackedSwitchSignature: u16     = 0x0100;
+    pub const SparseSwitchSignature: u16     = 0x0200;
+    pub const ArrayDataSignature: u16        = 0x0300;
+}
+#[rustfmt::skip]
+#[allow(non_upper_case_globals)]
 pub mod flags {
     pub const Branch: u8              = 0x01;  // conditional or unconditional branch
     pub const Continue: u8            = 0x02;  // flow can continue to next statement
@@ -160,6 +185,330 @@ pub mod verify_flags {
     pub const VerifyRegBPrototype: u32      = 0x2000000;
 }
 
+impl<'a> Instruction<'a> {
+    #[inline(always)]
+    const fn format_desc(&self) -> &'static InstructionDescriptor {
+        &Instruction::INSN_DESCRIPTORS[(self.0[0] & 0xFF) as usize]
+    }
+
+    pub const fn opcode(&self) -> Code {
+        self.format_desc().opcode
+    }
+
+    pub const fn format(&self) -> &'static Format {
+        &self.format_desc().format
+    }
+
+    pub const fn name(&self) -> &'static str {
+        &self.format_desc().name
+    }
+
+    pub fn next(&self) -> Instruction<'a> {
+        self.relative_at(self.size_in_code_units())
+    }
+
+    #[inline(always)]
+    pub fn size_in_code_units(&self) -> usize {
+        let size = Instruction::format_desc_of(self.opcode()).size_in_code_units;
+        match size {
+            code_flags::Complex => self.size_in_code_units_complex(),
+            code_flags::Custom => 1, /* TODO */
+            _ => size as usize,
+        }
+    }
+
+    pub fn size_in_code_units_complex(&self) -> usize {
+        let inst_data = self.fetch16(0);
+        debug_assert!(inst_data & 0xFF == 0);
+        match inst_data {
+            signatures::PackedSwitchSignature => 4 + self.fetch16(1) as usize * 2,
+            signatures::SparseSwitchSignature => 2 + self.fetch16(1) as usize * 4,
+            signatures::ArrayDataSignature => {
+                let element_size = self.fetch16(1) as usize;
+                let length = self.fetch32(2) as usize;
+                // The plus 1 is to round up for odd size and width.
+                4 + (element_size * length + 1) / 2
+            }
+            _ => 1,
+        }
+    }
+
+    pub fn verify_flags(&self) -> u32 {
+        Instruction::verify_flags_of(self.opcode())
+    }
+}
+
+pub struct VarArgs {
+    pub count: u8,
+    pub start_reg: u8,
+}
+// access to registers of all formats
+#[allow(non_snake_case)]
+pub mod vreg {
+
+    use super::*;
+    use crate::{dex_err, error::DexError, Result};
+
+    // AA|op ...
+    fn inst_aa(inst: &Instruction<'_>) -> u8 {
+        (inst.fetch16(0) >> 8) as u8
+    }
+
+    // B|A|op ...
+    fn inst_a(inst: &Instruction<'_>) -> u8 {
+        (inst.fetch16(0) >> 8) as u8 & 0x0F
+    }
+
+    // B|A|op ...
+    fn inst_b(inst: &Instruction<'_>) -> u8 {
+        (inst.fetch16(0) >> 12) as u8
+    }
+
+    //------------------------------------------------------------------------------
+    // VRegA
+    //------------------------------------------------------------------------------
+    #[inline]
+    pub fn has_a(inst: &Instruction<'_>) -> bool {
+        match &inst.format_desc().format {
+            Format::k10t
+            | Format::k10x
+            | Format::k11n
+            | Format::k11x
+            | Format::k12x
+            | Format::k20t
+            | Format::k21c
+            | Format::k21h
+            | Format::k21s
+            | Format::k21t
+            | Format::k22b
+            | Format::k22c
+            | Format::k22s
+            | Format::k22t
+            | Format::k22x
+            | Format::k23x
+            | Format::k30t
+            | Format::k31c
+            | Format::k31i
+            | Format::k31t
+            | Format::k32x
+            | Format::k35c
+            | Format::k3rc
+            | Format::k45cc
+            | Format::k4rcc
+            | Format::k51l => true,
+            _ => false,
+        }
+    }
+
+    #[inline]
+    pub fn A(inst: &Instruction<'_>) -> Result<i32> {
+        Ok(match inst.format() {
+            // AA|op
+            Format::k10t
+            | Format::k10x
+            | Format::k11x
+            | Format::k21c
+            | Format::k21h
+            | Format::k21s
+            | Format::k21t
+            | Format::k22b
+            | Format::k22x
+            | Format::k23x
+            | Format::k31c
+            | Format::k31i
+            | Format::k31t
+            | Format::k3rc
+            | Format::k51l
+            | Format::k4rcc => inst_aa(inst) as i32,
+            // B|A|op
+            Format::k11n | Format::k12x | Format::k22c | Format::k22s | Format::k22t => {
+                inst_a(inst) as i32
+            }
+            // op AAAA
+            Format::k32x | Format::k20t => inst.fetch16(1) as i32,
+            // op AAAAAAAA
+            Format::k30t => inst.fetch32(1) as i32,
+            // A|G|op
+            Format::k35c | Format::k45cc => inst_b(inst) as i32,
+            _ => {
+                return dex_err!(OperandAccessError {
+                    insn_name: inst.name(),
+                    operand: "A"
+                })
+            }
+        })
+    }
+
+    //------------------------------------------------------------------------------
+    // VRegB
+    //------------------------------------------------------------------------------
+    #[inline]
+    pub fn has_b(inst: &Instruction<'_>) -> bool {
+        match &inst.format_desc().format {
+            Format::k11n
+            | Format::k12x
+            | Format::k21c
+            | Format::k21h
+            | Format::k21s
+            | Format::k21t
+            | Format::k22b
+            | Format::k22c
+            | Format::k22s
+            | Format::k22t
+            | Format::k22x
+            | Format::k23x
+            | Format::k31c
+            | Format::k31i
+            | Format::k31t
+            | Format::k32x
+            | Format::k35c
+            | Format::k3rc
+            | Format::k45cc
+            | Format::k4rcc
+            | Format::k51l => true,
+            _ => false,
+        }
+    }
+
+    pub fn has_wide_b(inst: &Instruction<'_>) -> bool {
+        *inst.format() == Format::k51l
+    }
+
+    #[inline]
+    pub fn wide_b(inst: &Instruction<'_>) -> u64 {
+        debug_assert!(*inst.format() == Format::k51l);
+        inst.fetch32(1) as u64 | ((inst.fetch32(3) as u64) << 32)
+    }
+
+    #[inline]
+    pub fn B(inst: &Instruction<'_>) -> Result<i32> {
+        Ok(match inst.format() {
+            // B|A|op with #+B
+            Format::k11n => ((inst_b(inst) as i32) << 28) >> 28,
+            // op BBBB
+            Format::k21c
+            | Format::k21t
+            | Format::k21s
+            | Format::k21h
+            | Format::k22x
+            | Format::k35c
+            | Format::k3rc
+            | Format::k45cc
+            | Format::k4rcc => inst.fetch16(1) as i32,
+            // B|A|op
+            Format::k12x | Format::k22c | Format::k22s | Format::k22t => inst_b(inst) as i32,
+            // op CC|BB
+            Format::k22b | Format::k23x => (inst.fetch16(1) & 0xFF) as i32,
+            // op BBBBBBBB
+            Format::k31c | Format::k31i | Format::k31t => inst.fetch32(1) as i32,
+            // op AAAA BBBB
+            Format::k32x => inst.fetch16(2) as i32,
+            // op BBBBBBBBBBBBBBBBB
+            Format::k51l => wide_b(inst) as i32,
+            _ => {
+                return dex_err!(OperandAccessError {
+                    insn_name: inst.name(),
+                    operand: "B"
+                })
+            }
+        })
+    }
+
+    //------------------------------------------------------------------------------
+    // VRegC
+    //------------------------------------------------------------------------------
+    #[inline]
+    pub fn has_c(inst: &Instruction<'_>) -> bool {
+        match &inst.format_desc().format {
+            Format::k22b
+            | Format::k22c
+            | Format::k22s
+            | Format::k22t
+            | Format::k23x
+            | Format::k35c
+            | Format::k3rc
+            | Format::k45cc
+            | Format::k4rcc => true,
+            _ => false,
+        }
+    }
+
+    #[inline]
+    pub fn C(inst: &Instruction<'_>) -> Result<i32> {
+        Ok(match inst.format() {
+            // op CCCC
+            Format::k22c | Format::k22s | Format::k22t => inst.fetch16(1) as i32,
+            // op CC|BB
+            Format::k22b | Format::k23x => ((inst.fetch16(1) >> 8) & 0xFF) as i32,
+            // op BBBB CCCC
+            Format::k3rc | Format::k4rcc => inst.fetch16(2) as i32,
+            // op BBBB HH|CC
+            Format::k35c | Format::k45cc => (inst.fetch16(2) & 0x0F) as i32,
+            _ => {
+                return dex_err!(OperandAccessError {
+                    insn_name: inst.name(),
+                    operand: "C"
+                })
+            }
+        })
+    }
+
+    //------------------------------------------------------------------------------
+    // VRegH
+    //------------------------------------------------------------------------------
+    #[inline]
+    pub fn has_h(inst: &Instruction<'_>) -> bool {
+        match &inst.format_desc().format {
+            Format::k45cc | Format::k4rcc => true,
+            _ => false,
+        }
+    }
+
+    #[inline]
+    pub fn H(inst: &Instruction<'_>) -> Result<i32> {
+        Ok(match &inst.format_desc().format {
+            Format::k45cc | Format::k4rcc => inst.fetch16(3) as i32,
+            _ => {
+                return dex_err!(OperandAccessError {
+                    insn_name: inst.name(),
+                    operand: "H"
+                })
+            }
+        })
+    }
+
+    //------------------------------------------------------------------------------
+    // VarArgs
+    //------------------------------------------------------------------------------
+    #[inline]
+    pub fn has_var_args(inst: &Instruction<'_>) -> bool {
+        match &inst.format_desc().format {
+            Format::k35c | Format::k45cc => true,
+            _ => false,
+        }
+    }
+
+    #[inline]
+    pub fn var_args(inst: &Instruction<'_>) -> VarArgs {
+        let reg_list = inst.fetch16(2);
+        let count = inst_b(inst);
+        // TODO: why only 5?
+        debug_assert!(
+            count <= 5,
+            "Invalid arg count in {:?} ({count})",
+            inst.format()
+        );
+
+        VarArgs {
+            count,
+            start_reg: reg_list as u8,
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// instruction descriptors
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
 pub struct InstructionDescriptor {
     pub name: &'static str,
     pub format: Format,
