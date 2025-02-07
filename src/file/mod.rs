@@ -14,6 +14,7 @@ pub mod instruction;
 pub use instruction::*;
 pub mod code_item_accessors;
 pub use code_item_accessors::*;
+pub mod dump;
 
 use crate::{dex_err, error::DexError, leb128::decode_leb128, utf, Result};
 
@@ -249,7 +250,6 @@ impl<'a> DexFile<'a> {
         self.get_utf16_str(string_id)
     }
 
-    // -- types
     #[inline(always)]
     pub fn get_type_id(&self, idx: TypeIndex) -> Result<&'a TypeId> {
         check_lt_result!(idx as u32, self.num_type_ids(), TypeId);
@@ -266,13 +266,14 @@ impl<'a> DexFile<'a> {
         self.type_ids
     }
 
-    pub fn get_type_desc(&self, type_id: &TypeId) -> Result<(u32, &'a [u8])> {
-        self.get_string_data(self.get_string_id(type_id.descriptor_idx)?)
+    #[inline(always)]
+    pub fn get_type_desc(&self, type_id: &TypeId) -> Result<String> {
+        self.get_utf16_str_lossy_at(type_id.descriptor_idx)
     }
 
-    pub fn get_type_desc_at(&self, idx: TypeIndex) -> Result<(u32, &'a [u8])> {
-        let type_id = self.get_type_id(idx)?;
-        self.get_string_data(self.get_string_id(type_id.descriptor_idx)?)
+    #[inline(always)]
+    pub fn get_type_desc_at(&self, idx: TypeIndex) -> Result<String> {
+        self.get_type_desc(self.get_type_id(idx)?)
     }
 
     pub fn get_type_desc_utf16_lossy_at(&self, idx: TypeIndex) -> Result<String> {
@@ -329,10 +330,14 @@ impl<'a> DexFile<'a> {
         self.field_ids
     }
 
+    pub fn get_field_name(&self, field_id: &FieldId) -> Result<String> {
+        self.get_utf16_str_lossy_at(field_id.name_idx)
+    }
+
     // Proto related methods
-    pub fn get_proto_id(&self, idx: u32) -> &'a ProtoId {
-        check_lt!(idx, self.header.proto_ids_size, ProtoId);
-        &self.proto_ids[idx as usize]
+    pub fn get_proto_id(&self, idx: ProtoIndex) -> Result<&'a ProtoId> {
+        check_lt_result!(idx, self.header.proto_ids_size, ProtoId);
+        Ok(&self.proto_ids[idx as usize])
     }
 
     pub fn num_proto_ids(&self) -> u32 {
@@ -341,6 +346,24 @@ impl<'a> DexFile<'a> {
 
     pub fn get_proto_ids(&self) -> &'a [ProtoId] {
         self.proto_ids
+    }
+
+    pub fn get_shorty_at(&self, idx: ProtoIndex) -> Result<String> {
+        let proto_id = self.get_proto_id(idx)?;
+        self.get_shorty(proto_id)
+    }
+
+    pub fn get_shorty_lossy_at(&self, idx: ProtoIndex) -> Result<String> {
+        let proto_id = self.get_proto_id(idx)?;
+        self.get_shorty_lossy(proto_id)
+    }
+
+    pub fn get_shorty(&self, proto_id: &ProtoId) -> Result<String> {
+        self.get_utf16_str_at(proto_id.shorty_idx)
+    }
+
+    pub fn get_shorty_lossy(&self, proto_id: &ProtoId) -> Result<String> {
+        self.get_utf16_str_lossy_at(proto_id.shorty_idx)
     }
 
     // method ids related methods
@@ -375,11 +398,6 @@ impl<'a> DexFile<'a> {
     #[inline(always)]
     pub fn get_class_defs(&self) -> &'a [ClassDef] {
         self.class_defs
-    }
-
-    #[inline]
-    pub fn get_class_desc(&self, class_def: &ClassDef) -> Result<(u32, &'a [u8])> {
-        self.get_type_desc_at(class_def.class_idx)
     }
 
     #[inline]

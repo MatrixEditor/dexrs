@@ -1,4 +1,4 @@
-use super::{modifiers, ClassDef, DexFile, FieldId, InvokeType, MethodId, ACC_STATIC};
+use super::{ClassDef, DexFile, FieldId, InvokeType, MethodId, ACC_STATIC};
 use crate::{
     file::{ACC_CONSTRUCTOR, ACC_INTERFACE},
     leb128::decode_leb128_off,
@@ -43,7 +43,7 @@ impl<'a> Method<'a> {
         debug_assert!(self.access_flags & ACC_STATIC == 0x00);
         if class_access_flags & ACC_INTERFACE != 0 {
             InvokeType::Interface
-        } else if (self.access_flags & ACC_CONSTRUCTOR != 0) {
+        } else if self.access_flags & ACC_CONSTRUCTOR != 0 {
             InvokeType::Super
         } else {
             InvokeType::Virtual
@@ -160,9 +160,12 @@ impl<'a> ClassAccessor<'a> {
             static_fields_off: 0,
         };
         accessor.num_static_fields = decode_leb128_off(&class_data, &mut accessor.ptr_pos);
-        accessor.num_instance_fields = decode_leb128_off(&class_data[accessor.ptr_pos..], &mut accessor.ptr_pos);
-        accessor.num_direct_methods = decode_leb128_off(&class_data[accessor.ptr_pos..], &mut accessor.ptr_pos);
-        accessor.num_virtual_methods = decode_leb128_off(&class_data[accessor.ptr_pos..], &mut accessor.ptr_pos);
+        accessor.num_instance_fields =
+            decode_leb128_off(&class_data[accessor.ptr_pos..], &mut accessor.ptr_pos);
+        accessor.num_direct_methods =
+            decode_leb128_off(&class_data[accessor.ptr_pos..], &mut accessor.ptr_pos);
+        accessor.num_virtual_methods =
+            decode_leb128_off(&class_data[accessor.ptr_pos..], &mut accessor.ptr_pos);
         accessor.static_fields_off = accessor.ptr_pos as u32;
         accessor
     }

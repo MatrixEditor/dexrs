@@ -61,9 +61,66 @@ impl<'a> CodeItemAccessor<'a> {
         self.code_item.tries_size
     }
 
-    pub fn insn_at(&self, pc: u32) -> Instruction<'a> {
+    pub fn inst_at(&self, pc: u32) -> Instruction<'a> {
         debug_assert!(pc < self.insns_size_in_code_units());
         Instruction::at(&self.insns[pc as usize..])
+    }
+}
 
+impl<'a> IntoIterator for CodeItemAccessor<'a> {
+    type Item = Instruction<'a>;
+    type IntoIter = DexInstructionIterator<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        // iterator will be valid on empty input
+        DexInstructionIterator::new(self.insns)
+    }
+}
+
+pub struct DexInstructionIterator<'a> {
+    instructions: &'a [u16],
+    pc: usize,
+}
+
+impl<'a> DexInstructionIterator<'a> {
+    pub fn new(instructions: &'a [u16]) -> Self {
+        Self {
+            instructions,
+            pc: 0,
+        }
+    }
+
+    pub fn inst(&self) -> Instruction<'a> {
+        debug_assert!(self.pc < self.instructions.len());
+        Instruction::at(&self.instructions[self.pc..])
+    }
+
+    // REVISIT: make mutable?
+    pub fn dex_pc(&self) -> usize {
+        self.pc
+    }
+
+    pub fn advance(&mut self) {
+        if self.pc >= self.instructions.len() {
+            return;
+        }
+
+        let size = self.inst().size_in_code_units();
+        self.pc += size;
+        debug_assert!(self.pc <= self.instructions.len());
+    }
+}
+
+impl<'a> Iterator for DexInstructionIterator<'a> {
+    type Item = Instruction<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.pc < self.instructions.len() {
+            let inst = self.inst();
+            self.pc += inst.size_in_code_units();
+            Some(inst)
+        } else {
+            None
+        }
     }
 }

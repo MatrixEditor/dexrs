@@ -153,6 +153,7 @@ pub mod flags {
     pub const Experimental: u8        = 0x80;  // is an experimental opcode
 }
 
+// These flags may be used later to verify instructions
 #[rustfmt::skip]
 #[allow(non_upper_case_globals)]
 pub mod verify_flags {
@@ -191,14 +192,17 @@ impl<'a> Instruction<'a> {
         &Instruction::INSN_DESCRIPTORS[(self.0[0] & 0xFF) as usize]
     }
 
+    #[inline(always)]
     pub const fn opcode(&self) -> Code {
         self.format_desc().opcode
     }
 
+    #[inline(always)]
     pub const fn format(&self) -> &'static Format {
         &self.format_desc().format
     }
 
+    #[inline(always)]
     pub const fn name(&self) -> &'static str {
         &self.format_desc().name
     }
@@ -240,11 +244,22 @@ impl<'a> Instruction<'a> {
 
 pub struct VarArgs {
     pub count: u8,
-    pub start_reg: u8,
+    pub arg: Vec<u8>,
+}
+
+impl VarArgs {
+    pub fn new(count: u8) -> VarArgs {
+        VarArgs {
+            count,
+            arg: vec![0; count as usize],
+        }
+    }
 }
 // access to registers of all formats
 #[allow(non_snake_case)]
 pub mod vreg {
+
+    use std::ops::RangeInclusive;
 
     use super::*;
     use crate::{dex_err, error::DexError, Result};
@@ -492,17 +507,48 @@ pub mod vreg {
     pub fn var_args(inst: &Instruction<'_>) -> VarArgs {
         let reg_list = inst.fetch16(2);
         let count = inst_b(inst);
-        // TODO: why only 5?
+        let mut var_args = VarArgs::new(count);
+
+        // NOTE only five as maximum
         debug_assert!(
             count <= 5,
             "Invalid arg count in {:?} ({count})",
             inst.format()
         );
 
-        VarArgs {
-            count,
-            start_reg: reg_list as u8,
+        if count > 4 {
+            var_args.arg[4] = inst_a(inst);
         }
+        if count > 3 {
+            var_args.arg[3] = ((reg_list >> 12) & 0x0F) as u8;
+        }
+        if count > 2 {
+            var_args.arg[2] = ((reg_list >> 8) & 0x0F) as u8;
+        }
+        if count > 1 {
+            var_args.arg[1] = ((reg_list >> 4) & 0x0F) as u8;
+        }
+        if count > 0 {
+            var_args.arg[0] = (reg_list & 0x0F) as u8;
+        }
+        var_args
+    }
+
+    //------------------------------------------------------------------------------
+    // ArgsRange
+    //------------------------------------------------------------------------------
+    #[inline]
+    pub fn has_args_range(inst: &Instruction<'_>) -> bool {
+        match &inst.format_desc().format {
+            Format::k3rc | Format::k4rcc => true,
+            _ => false,
+        }
+    }
+
+    pub fn args_range(inst: &Instruction<'_>) -> Result<RangeInclusive<u16>> {
+        let first_reg = vreg::C(inst)? as u16;
+        let last_reg = first_reg + (vreg::A(inst)? - 1) as u16;
+        Ok(first_reg..=last_reg)
     }
 }
 
