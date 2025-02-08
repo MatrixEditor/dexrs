@@ -201,13 +201,22 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
     #[inline]
     pub fn get_string_data(&self, string_id: &StringId) -> Result<(u32, &'a [u8])> {
         check_lt_result!(string_id.offset(), self.file_size(), "string-id");
-        let (utf16_len, size) = decode_leb128(&self.mmap[string_id.offset()..]);
+        let (utf16_len, size) = match decode_leb128(&self.mmap[string_id.offset()..]) {
+            Ok((utf16_len, size)) => (utf16_len, size),
+            Err(DexError::VarIntError(e)) => {
+                return dex_err!(BadStringData {
+                    offset: string_id.offset(),
+                    kind: e
+                });
+            }
+            _ => unreachable!(),
+        };
 
         let start = string_id.offset() + size;
         check_lt_result!(start, self.file_size(), "string-data");
         match &self.mmap[start..].iter().position(|x| *x == 0) {
             Some(pos) => Ok((utf16_len, &self.mmap[start..start + pos + 1])),
-            None => dex_err!(BadStringData, start),
+            None => dex_err!(BadStringDataMissingNullByte, start),
         }
     }
 
@@ -374,7 +383,7 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
     // classdef related methods
     #[inline(always)]
     pub fn get_class_def(&self, idx: u32) -> Result<&'a ClassDef> {
-        check_lt_result!(idx, self.header.class_defs_size, ClassDef);
+        check_lt_result!(idx, self.class_defs.len(), ClassDef);
         Ok(&self.class_defs[idx as usize])
     }
 

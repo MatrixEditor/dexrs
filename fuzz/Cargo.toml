@@ -19,3 +19,10 @@ path = "fuzz_targets/from_raw_parts.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "class_accessor"
+path = "fuzz_targets/class_accessor.rs"
+test = false
+doc = false
+bench = false

@@ -63,7 +63,7 @@ pub enum DexError {
     },
 
     #[error("Bad string data({0}) does not end with a null byte!")]
-    BadStringData(usize),
+    BadStringDataMissingNullByte(usize),
 
     #[error("{0}")]
     Mutf8DecodeError(#[from] std::string::FromUtf16Error),
@@ -83,6 +83,23 @@ pub enum DexError {
     OperandAccessError {
         insn_name: &'static str,
         operand: &'static str,
+    },
+
+    #[error("Failed to parse varint: {0}")]
+    VarIntError(#[from] varint_simd::VarIntDecodeError),
+
+    #[error("Bad string data({offset}) contains invalid LEB128({kind:?}) which can't be converted to a valid u32")]
+    BadStringData {
+        offset: usize,
+        #[source]
+        kind: varint_simd::VarIntDecodeError,
+    },
+
+    #[error("Encountered invalid encoded index that would overflow: index({index}) + next index({next_index}) > u32::MAX for {item_ty}")]
+    BadEncodedIndex {
+        index: u32,
+        next_index: u32,
+        item_ty: &'static str,
     },
 }
 

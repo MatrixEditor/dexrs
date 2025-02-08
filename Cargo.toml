@@ -10,3 +10,10 @@ openssl = "0.10.64"
 plain = "0.2.3"
 thiserror = "2.0.11"
 varint-simd = "0.4.1"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "parse"
+harness = false

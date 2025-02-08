@@ -1,29 +1,27 @@
-use super::{ClassDef, DexFile, FieldId, InvokeType, MethodId, ACC_STATIC};
+use super::{ClassDef, DexContainer, DexFile, InvokeType, ACC_STATIC};
 use crate::{
+    dex_err,
+    error::DexError,
     file::{ACC_CONSTRUCTOR, ACC_INTERFACE},
     leb128::decode_leb128_off,
     Result,
 };
 
-pub trait ClassItemBase<'a>: Copy + Clone {
-    fn read(&mut self, data: &'a [u8], pos: &mut usize);
-
-    fn init(dex: &'a DexFile<'a>) -> Self;
+pub trait ClassItemBase: Copy + Clone + Default {
+    fn read(&mut self, data: &[u8], pos: &mut usize) -> Result<()>;
 
     fn next_section(&mut self);
 }
 
 #[derive(Copy, Clone)]
-pub struct Method<'a> {
-    dex: &'a DexFile<'a>,
-
+pub struct Method {
     pub index: u32,
     pub access_flags: u32,
     pub code_offset: u32,
     pub is_static_or_direct: bool,
 }
 
-impl<'a> Method<'a> {
+impl<'a> Method {
     #[inline]
     pub fn get_direct_invoke_type(&self) -> InvokeType {
         if self.access_flags & ACC_STATIC != 0 {
@@ -31,11 +29,6 @@ impl<'a> Method<'a> {
         } else {
             InvokeType::Direct
         }
-    }
-
-    #[inline(always)]
-    pub fn get_method_id(&self) -> Result<&'a MethodId> {
-        self.dex.get_method_id(self.index)
     }
 
     #[inline(always)]
@@ -51,21 +44,21 @@ impl<'a> Method<'a> {
     }
 }
 
-impl<'a> ClassItemBase<'a> for Method<'a> {
-    fn read(&mut self, data: &'a [u8], pos: &mut usize) {
-        self.index += decode_leb128_off::<u32>(&data[*pos..], pos);
-        self.access_flags = decode_leb128_off::<u32>(&data[*pos..], pos);
-        self.code_offset = decode_leb128_off::<u32>(&data[*pos..], pos);
-    }
-
-    fn init(dex: &'a DexFile<'a>) -> Self {
-        Self {
-            dex,
-            index: 0,
-            access_flags: 0,
-            code_offset: 0,
-            is_static_or_direct: false,
+impl<'a> ClassItemBase for Method {
+    fn read(&mut self, data: &'_ [u8], pos: &mut usize) -> Result<()> {
+        let target = self.index as usize;
+        let value = decode_leb128_off::<u32>(&data[*pos..], pos)?;
+        if target + value as usize > u32::MAX as usize {
+            return dex_err!(BadEncodedIndex {
+                index: self.index,
+                next_index: value,
+                item_ty: "Method"
+            });
         }
+        self.index += value;
+        self.access_flags = decode_leb128_off::<u32>(&data[*pos..], pos)?;
+        self.code_offset = decode_leb128_off::<u32>(&data[*pos..], pos)?;
+        Ok(())
     }
 
     fn next_section(&mut self) {
@@ -73,39 +66,44 @@ impl<'a> ClassItemBase<'a> for Method<'a> {
     }
 }
 
+impl Default for Method {
+    fn default() -> Self {
+        Self {
+            index: 0,
+            access_flags: 0,
+            code_offset: 0,
+            is_static_or_direct: false,
+        }
+    }
+}
 #[derive(Copy, Clone)]
-pub struct Field<'a> {
-    dex: &'a DexFile<'a>,
-
+pub struct Field {
     pub index: u32,
     pub access_flags: u32,
     pub is_static: bool,
 }
 
-impl<'a> Field<'a> {
+impl<'a> Field {
     #[inline(always)]
     pub fn is_static(&self) -> bool {
         self.is_static
     }
-
-    pub fn get_field_id(&self) -> Result<&'a FieldId> {
-        self.dex.get_field_id(self.index)
-    }
 }
 
-impl<'a> ClassItemBase<'a> for Field<'a> {
-    fn read(&mut self, data: &'a [u8], pos: &mut usize) {
-        self.index += decode_leb128_off::<u32>(&data[*pos..], pos);
-        self.access_flags = decode_leb128_off::<u32>(&data[*pos..], pos);
-    }
-
-    fn init(dex: &'a DexFile<'a>) -> Self {
-        Self {
-            dex,
-            index: 0,
-            access_flags: 0,
-            is_static: true,
+impl<'a> ClassItemBase for Field {
+    fn read(&mut self, data: &'_ [u8], pos: &mut usize) -> Result<()> {
+        let target = self.index as usize;
+        let value = decode_leb128_off::<u32>(&data[*pos..], pos)?;
+        if target + value as usize > u32::MAX as usize {
+            return dex_err!(BadEncodedIndex {
+                index: self.index,
+                next_index: value,
+                item_ty: "Field"
+            });
         }
+        self.index += value;
+        self.access_flags = decode_leb128_off::<u32>(&data[*pos..], pos)?;
+        Ok(())
     }
 
     fn next_section(&mut self) {
@@ -113,8 +111,17 @@ impl<'a> ClassItemBase<'a> for Field<'a> {
     }
 }
 
+impl Default for Field {
+    fn default() -> Self {
+        Self {
+            index: 0,
+            access_flags: 0,
+            is_static: true,
+        }
+    }
+}
+
 pub struct ClassAccessor<'a> {
-    dex: &'a DexFile<'a>,
     ptr_pos: usize,
     class_data: &'a [u8],
 
@@ -127,30 +134,38 @@ pub struct ClassAccessor<'a> {
     static_fields_off: u32,
 }
 
-impl<'a> DexFile<'a> {
-    pub fn get_class_accessor(&self, class_def: &ClassDef) -> Option<ClassAccessor<'_>> {
+impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
+    pub fn get_class_accessor(&self, class_def: &ClassDef) -> Result<Option<ClassAccessor<'_>>> {
         match class_def.class_data_off {
-            0 => None,
-            off => Some(ClassAccessor::from_raw(self, &self.mmap[off as usize..])),
+            0 => Ok(None),
+            off => {
+                if off as usize >= self.file_size() {
+                    return dex_err!(BadOffsetTooLarge {
+                        offset: off,
+                        size: self.file_size(),
+                        section: "class_data_off"
+                    });
+                }
+                Ok(Some(ClassAccessor::from_raw(&self.mmap[off as usize..])?))
+            }
         }
     }
 }
 
-type FieldVisitor = fn(&Field<'_>) -> Result<()>;
-type MethodVisitor = fn(&Method<'_>) -> Result<()>;
+type FieldVisitor = fn(&Field) -> Result<()>;
+type MethodVisitor = fn(&Method) -> Result<()>;
 
-fn null_method_visitor(_method: &Method<'_>) -> Result<()> {
+fn null_method_visitor(_method: &Method) -> Result<()> {
     Ok(())
 }
 
-fn null_field_visitor(_field: &Field<'_>) -> Result<()> {
+fn null_field_visitor(_field: &Field) -> Result<()> {
     Ok(())
 }
 
 impl<'a> ClassAccessor<'a> {
-    pub fn from_raw(dex: &'a DexFile<'a>, class_data: &'a [u8]) -> Self {
+    pub fn from_raw(class_data: &'a [u8]) -> Result<Self> {
         let mut accessor = Self {
-            dex,
             ptr_pos: 0,
             class_data,
             num_direct_methods: 0,
@@ -159,15 +174,15 @@ impl<'a> ClassAccessor<'a> {
             num_instance_fields: 0,
             static_fields_off: 0,
         };
-        accessor.num_static_fields = decode_leb128_off(&class_data, &mut accessor.ptr_pos);
+        accessor.num_static_fields = decode_leb128_off(&class_data, &mut accessor.ptr_pos)?;
         accessor.num_instance_fields =
-            decode_leb128_off(&class_data[accessor.ptr_pos..], &mut accessor.ptr_pos);
+            decode_leb128_off(&class_data[accessor.ptr_pos..], &mut accessor.ptr_pos)?;
         accessor.num_direct_methods =
-            decode_leb128_off(&class_data[accessor.ptr_pos..], &mut accessor.ptr_pos);
+            decode_leb128_off(&class_data[accessor.ptr_pos..], &mut accessor.ptr_pos)?;
         accessor.num_virtual_methods =
-            decode_leb128_off(&class_data[accessor.ptr_pos..], &mut accessor.ptr_pos);
+            decode_leb128_off(&class_data[accessor.ptr_pos..], &mut accessor.ptr_pos)?;
         accessor.static_fields_off = accessor.ptr_pos as u32;
-        accessor
+        Ok(accessor)
     }
 
     #[inline(always)]
@@ -216,7 +231,7 @@ impl<'a> ClassAccessor<'a> {
         direct_method_visitor: MethodVisitor,
         virtual_method_visitor: MethodVisitor,
     ) -> Result<()> {
-        let mut field = Field::init(self.dex);
+        let mut field = Field::default();
         let mut offset = self.static_fields_off as usize;
         if offset == 0 {
             panic!("Static fields offset is zero which means there is no class data associated with this class");
@@ -237,7 +252,7 @@ impl<'a> ClassAccessor<'a> {
             &mut field,
         )?;
 
-        let mut method = Method::init(self.dex);
+        let mut method = Method::default();
         self.visit_members(
             self.num_direct_methods,
             &mut offset,
@@ -254,9 +269,8 @@ impl<'a> ClassAccessor<'a> {
     }
 
     #[inline(always)]
-    pub fn get_fields(&self) -> DataIterator<'a, Field<'a>> {
+    pub fn get_fields(&'a self) -> DataIterator<'a, Field> {
         DataIterator::new(
-            self.dex,
             self.class_data,
             self.static_fields_off as usize,
             self.num_static_fields as usize,
@@ -265,9 +279,8 @@ impl<'a> ClassAccessor<'a> {
     }
 
     #[inline(always)]
-    pub fn get_static_fieds(&self) -> impl Iterator<Item = Field<'a>> {
+    pub fn get_static_fieds(&'a self) -> DataIterator<'a, Field> {
         DataIterator::new(
-            self.dex,
             self.class_data,
             self.static_fields_off as usize,
             self.num_static_fields as usize,
@@ -276,13 +289,13 @@ impl<'a> ClassAccessor<'a> {
     }
 
     #[inline(always)]
-    pub fn get_instance_fields(&self) -> impl Iterator<Item = Field<'a>> {
+    pub fn get_instance_fields(&'a self) -> impl Iterator<Item = Field> + 'a {
         self.get_fields().skip(self.num_static_fields as usize)
     }
 
     #[inline(always)]
-    pub fn get_methods(&self) -> Result<impl Iterator<Item = Method<'a>>> {
-        let mut field = Field::init(self.dex);
+    pub fn get_methods(&self) -> Result<impl Iterator<Item = Method> + 'a> {
+        let mut field = Field::default();
         let mut offset = self.static_fields_off as usize;
         self.visit_members(
             self.num_fields() as u32,
@@ -292,7 +305,6 @@ impl<'a> ClassAccessor<'a> {
         )?;
         // switch to instance fields
         Ok(DataIterator::new(
-            self.dex,
             self.class_data,
             offset as usize,
             self.num_direct_methods as usize,
@@ -301,12 +313,12 @@ impl<'a> ClassAccessor<'a> {
     }
 
     #[inline(always)]
-    pub fn get_direct_methods(&self) -> Result<impl Iterator<Item = Method<'a>>> {
+    pub fn get_direct_methods(&self) -> Result<impl Iterator<Item = Method> + 'a> {
         Ok(self.get_methods()?.take(self.num_direct_methods as usize))
     }
 
     #[inline(always)]
-    pub fn get_virtual_methods(&self) -> Result<impl Iterator<Item = Method<'a>>> {
+    pub fn get_virtual_methods(&self) -> Result<impl Iterator<Item = Method> + 'a> {
         Ok(self.get_methods()?.skip(self.num_direct_methods as usize))
     }
 
@@ -319,18 +331,18 @@ impl<'a> ClassAccessor<'a> {
         iter: &mut T,
     ) -> Result<()>
     where
-        T: ClassItemBase<'a>,
+        T: ClassItemBase,
         F: Fn(&T) -> Result<()>,
     {
         for _ in 0..count {
-            iter.read(&self.class_data, offset);
+            iter.read(&self.class_data, offset)?;
             visitor(&iter)?;
         }
         Ok(())
     }
 }
 
-pub struct DataIterator<'a, T: ClassItemBase<'a>> {
+pub struct DataIterator<'a, T: ClassItemBase> {
     class_data: &'a [u8],
     value: T,
 
@@ -340,9 +352,8 @@ pub struct DataIterator<'a, T: ClassItemBase<'a>> {
     end_pos: usize,       // const
 }
 
-impl<'a, T: ClassItemBase<'a>> DataIterator<'a, T> {
+impl<'a, T: ClassItemBase> DataIterator<'a, T> {
     pub fn new(
-        dex: &'a DexFile<'a>,
         class_data: &'a [u8],
         start_pos: usize,
         partition_pos: usize,
@@ -350,7 +361,7 @@ impl<'a, T: ClassItemBase<'a>> DataIterator<'a, T> {
     ) -> Self {
         Self {
             class_data,
-            value: T::init(dex),
+            value: T::default(),
             pos: 0,
             partition_pos,
             off: start_pos,
@@ -367,7 +378,7 @@ impl<'a, T: ClassItemBase<'a>> DataIterator<'a, T> {
     }
 }
 
-impl<'a, T: ClassItemBase<'a>> Iterator for DataIterator<'a, T> {
+impl<'a, T: ClassItemBase> Iterator for DataIterator<'a, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -375,7 +386,14 @@ impl<'a, T: ClassItemBase<'a>> Iterator for DataIterator<'a, T> {
             if self.pos == self.partition_pos {
                 self.value.next_section();
             }
-            self.value.read(&self.class_data, &mut self.off);
+            match self.value.read(&self.class_data, &mut self.off) {
+                Ok(()) => {}
+                Err(e) => {
+                    self.pos = self.end_pos;
+                    // REVISIT: error propagation
+                    return None;
+                }
+            }
             self.pos += 1;
             return Some(self.value);
         }

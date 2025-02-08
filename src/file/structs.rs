@@ -90,6 +90,7 @@ pub type TypeList<'a> = &'a [TypeItem];
 #[repr(C)]
 #[derive(Debug)]
 pub struct MapItem {
+    // REVISIT: this may cause a panic on invalid input
     pub type_: MapItemType,
     unused_: u16,
     pub size: u32,
@@ -189,3 +190,41 @@ pub struct TryItem {
 }
 
 unsafe impl plain::Plain for TryItem {}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct AnnotationsDirectoryItem {
+    pub class_annotations_off: u32,
+    pub fields_size: u32,
+    pub methods_size: u32,
+    pub parameters_size: u32,
+}
+
+unsafe impl plain::Plain for AnnotationsDirectoryItem {}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct FieldAnnotationsItem {
+    pub field_idx: u32,
+    pub annotations_off: u32,
+}
+
+unsafe impl plain::Plain for FieldAnnotationsItem {}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct MethodAnnotationsItem {
+    pub method_idx: u32,
+    pub annotations_off: u32,
+}
+
+unsafe impl plain::Plain for MethodAnnotationsItem {}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct ParameterAnnotationsItem {
+    pub method_idx: u32,
+    pub annotations_off: u32,
+}
+
+unsafe impl plain::Plain for ParameterAnnotationsItem {}

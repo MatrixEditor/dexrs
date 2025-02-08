@@ -1,14 +1,16 @@
 #![no_main]
 #![allow(non_snake_case)]
 
-use dexrs::file::{DexFile, DexLocation, InMemoryDexContainer};
+use dexrs::file::{DexFile, DexLocation};
 
-extern crate libfuzzer_sys;
 extern crate dexrs;
+extern crate libfuzzer_sys;
 
 libfuzzer_sys::fuzz_target!(|data: &[u8]| {
     // this must not panic
     if let Ok(dex) = DexFile::from_raw_parts(&data, DexLocation::InMemory) {
-        let _ = dex;
+        if DexFile::verify(&dex, true).is_ok() {
+            let _ = dex;
+        }
     }
 });
