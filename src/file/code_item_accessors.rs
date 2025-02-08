@@ -77,9 +77,25 @@ impl<'a> CodeItemAccessor<'a> {
         debug_assert!(pc < self.insns_size_in_code_units());
         Instruction::at(&self.insns[pc as usize..])
     }
+
+    pub fn get_inst_offset_in_code_units(&self, inst: &Instruction<'_>) -> usize {
+        let code_ptr = self.insns.as_ptr() as usize;
+        let inst_ptr = inst.raw().as_ptr() as usize;
+        inst_ptr - code_ptr
+    }
 }
 
 impl<'a> IntoIterator for CodeItemAccessor<'a> {
+    type Item = Instruction<'a>;
+    type IntoIter = DexInstructionIterator<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        // iterator will be valid on empty input
+        DexInstructionIterator::new(self.insns)
+    }
+}
+
+impl<'a> IntoIterator for &'a CodeItemAccessor<'a> {
     type Item = Instruction<'a>;
     type IntoIter = DexInstructionIterator<'a>;
 

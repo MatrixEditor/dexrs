@@ -9,6 +9,7 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
+plain = "0.2.3"
 
 [dependencies.dexrs]
 path = ".."
@@ -23,6 +24,13 @@ bench = false
 [[bin]]
 name = "class_accessor"
 path = "fuzz_targets/class_accessor.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "instructions"
+path = "fuzz_targets/instructions.rs"
 test = false
 doc = false
 bench = false

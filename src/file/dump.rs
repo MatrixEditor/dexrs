@@ -279,7 +279,7 @@ impl<'a> Instruction<'a> {
                 }
             }
             Format::k35c => {
-                let var_args = vreg::var_args(self);
+                let var_args = vreg::var_args(self)?;
                 let args_str = var_args
                     .arg
                     .iter()
@@ -356,7 +356,7 @@ impl<'a> Instruction<'a> {
                 }
             }
             Format::k45cc => {
-                let var_args = vreg::var_args(self);
+                let var_args = vreg::var_args(self)?;
                 let args_str = var_args
                     .arg
                     .iter()
@@ -407,7 +407,7 @@ impl<'a> Instruction<'a> {
                     }
                 }
             }
-            Format::k51l => format!("{opcode} v{}, #{:+}", vreg::A(self)?, vreg::wide_b(self)),
+            Format::k51l => format!("{opcode} v{}, #{:+}", vreg::A(self)?, vreg::wide_b(self)?),
             Format::kInvalidFormat => "<invalid-opcode-format>".to_string(),
         })
     }

@@ -1,3 +1,5 @@
+use crate::{dex_err, error::DexError, Result};
+
 pub struct Instruction<'a>(&'a [u16]);
 
 impl<'a> Instruction<'a> {
@@ -6,22 +8,47 @@ impl<'a> Instruction<'a> {
         Instruction(code)
     }
 
-    #[inline(always)]
-    pub fn relative_at(&self, offset: usize) -> Instruction<'a> {
-        debug_assert!(offset < self.0.len());
-        Instruction::at(&self.0[offset..])
+    pub fn raw(&self) -> &'a [u16] {
+        self.0
+    }
+
+    #[inline]
+    pub fn relative_at(&self, offset: usize) -> Result<Instruction<'a>> {
+        if offset + 2 >= self.0.len() {
+            return dex_err!(BadInstructionOffset {
+                opcode: self.name(),
+                offset: offset,
+                size: self.0.len()
+            });
+        } else {
+            Ok(Instruction::at(&self.0[offset..]))
+        }
     }
 
     #[inline(always)]
-    pub fn fetch16(&self, offset: usize) -> u16 {
-        debug_assert!(offset < self.0.len());
-        self.0[offset]
+    pub fn fetch16(&self, offset: usize) -> Result<u16> {
+        if offset >= self.0.len() {
+            return dex_err!(BadInstruction {
+                opcode: self.name(),
+                offset: offset,
+                size: self.0.len(),
+                target_type: "u16"
+            });
+        }
+        Ok(self.0[offset])
     }
 
     #[inline(always)]
-    pub fn fetch32(&self, offset: usize) -> u32 {
-        debug_assert!(offset + 1 < self.0.len());
-        self.fetch16(offset) as u32 | ((self.fetch16(offset + 1) as u32) << 16)
+    pub fn fetch32(&self, offset: usize) -> Result<u32> {
+        if offset >= self.0.len() {
+            return dex_err!(BadInstruction {
+                opcode: self.name(),
+                offset: offset,
+                size: self.0.len(),
+                target_type: "u32"
+            });
+        }
+        Ok(self.fetch16(offset)? as u32 | ((self.fetch16(offset + 1)? as u32) << 16))
     }
 
     const fn format_desc_of(opcode: Code) -> &'static InstructionDescriptor {
@@ -210,7 +237,7 @@ impl<'a> Instruction<'a> {
         &self.format_desc().name
     }
 
-    pub fn next(&self) -> Instruction<'a> {
+    pub fn next(&self) -> Result<Instruction<'a>> {
         self.relative_at(self.size_in_code_units())
     }
 
@@ -218,26 +245,26 @@ impl<'a> Instruction<'a> {
     pub fn size_in_code_units(&self) -> usize {
         let size = Instruction::format_desc_of(self.opcode()).size_in_code_units;
         match size {
-            code_flags::Complex => self.size_in_code_units_complex(),
+            code_flags::Complex => self.size_in_code_units_complex().unwrap_or(1),
             code_flags::Custom => 1, /* TODO? */
             _ => size as usize,
         }
     }
 
-    pub fn size_in_code_units_complex(&self) -> usize {
-        let inst_data = self.fetch16(0);
+    pub fn size_in_code_units_complex(&self) -> Result<usize> {
+        let inst_data = self.fetch16(0)?;
         debug_assert!(inst_data & 0xFF == 0);
-        match inst_data {
-            signatures::PackedSwitchSignature => 4 + self.fetch16(1) as usize * 2,
-            signatures::SparseSwitchSignature => 2 + self.fetch16(1) as usize * 4,
+        Ok(match inst_data {
+            signatures::PackedSwitchSignature => 4 + self.fetch16(1)? as usize * 2,
+            signatures::SparseSwitchSignature => 2 + self.fetch16(1)? as usize * 4,
             signatures::ArrayDataSignature => {
-                let element_size = self.fetch16(1) as usize;
-                let length = self.fetch32(2) as usize;
+                let element_size = self.fetch16(1)? as usize;
+                let length = self.fetch32(2)? as usize;
                 // The plus 1 is to round up for odd size and width.
                 4 + (element_size * length + 1) / 2
             }
             _ => 1,
-        }
+        })
     }
 
     pub fn verify_flags(&self) -> u32 {
@@ -268,18 +295,18 @@ pub mod vreg {
     use crate::{dex_err, error::DexError, Result};
 
     // AA|op ...
-    fn inst_aa(inst: &Instruction<'_>) -> u8 {
-        (inst.fetch16(0) >> 8) as u8
+    fn inst_aa(inst: &Instruction<'_>) -> Result<u8> {
+        Ok((inst.fetch16(0)? >> 8) as u8)
     }
 
     // B|A|op ...
-    fn inst_a(inst: &Instruction<'_>) -> u8 {
-        (inst.fetch16(0) >> 8) as u8 & 0x0F
+    fn inst_a(inst: &Instruction<'_>) -> Result<u8> {
+        Ok((inst.fetch16(0)? >> 8) as u8 & 0x0F)
     }
 
     // B|A|op ...
-    fn inst_b(inst: &Instruction<'_>) -> u8 {
-        (inst.fetch16(0) >> 12) as u8
+    fn inst_b(inst: &Instruction<'_>) -> Result<u8> {
+        Ok((inst.fetch16(0)? >> 12) as u8)
     }
 
     //------------------------------------------------------------------------------
@@ -337,17 +364,17 @@ pub mod vreg {
             | Format::k31t
             | Format::k3rc
             | Format::k51l
-            | Format::k4rcc => inst_aa(inst) as i32,
+            | Format::k4rcc => inst_aa(inst)? as i32,
             // B|A|op
             Format::k11n | Format::k12x | Format::k22c | Format::k22s | Format::k22t => {
-                inst_a(inst) as i32
+                inst_a(inst)? as i32
             }
             // op AAAA
-            Format::k32x | Format::k20t => inst.fetch16(1) as i32,
+            Format::k32x | Format::k20t => inst.fetch16(1)? as i32,
             // op AAAAAAAA
-            Format::k30t => inst.fetch32(1) as i32,
+            Format::k30t => inst.fetch32(1)? as i32,
             // A|G|op
-            Format::k35c | Format::k45cc => inst_b(inst) as i32,
+            Format::k35c | Format::k45cc => inst_b(inst)? as i32,
             _ => {
                 return dex_err!(OperandAccessError {
                     insn_name: inst.name(),
@@ -393,16 +420,16 @@ pub mod vreg {
     }
 
     #[inline]
-    pub fn wide_b(inst: &Instruction<'_>) -> u64 {
+    pub fn wide_b(inst: &Instruction<'_>) -> Result<u64> {
         debug_assert!(*inst.format() == Format::k51l);
-        inst.fetch32(1) as u64 | ((inst.fetch32(3) as u64) << 32)
+        Ok(inst.fetch32(1)? as u64 | ((inst.fetch32(3)? as u64) << 32))
     }
 
     #[inline]
     pub fn B(inst: &Instruction<'_>) -> Result<i32> {
         Ok(match inst.format() {
             // B|A|op with #+B
-            Format::k11n => ((inst_b(inst) as i32) << 28) >> 28,
+            Format::k11n => ((inst_b(inst)? as i32) << 28) >> 28,
             // op BBBB
             Format::k21c
             | Format::k21t
@@ -412,17 +439,17 @@ pub mod vreg {
             | Format::k35c
             | Format::k3rc
             | Format::k45cc
-            | Format::k4rcc => inst.fetch16(1) as i32,
+            | Format::k4rcc => inst.fetch16(1)? as i32,
             // B|A|op
-            Format::k12x | Format::k22c | Format::k22s | Format::k22t => inst_b(inst) as i32,
+            Format::k12x | Format::k22c | Format::k22s | Format::k22t => inst_b(inst)? as i32,
             // op CC|BB
-            Format::k22b | Format::k23x => (inst.fetch16(1) & 0xFF) as i32,
+            Format::k22b | Format::k23x => (inst.fetch16(1)? & 0xFF) as i32,
             // op BBBBBBBB
-            Format::k31c | Format::k31i | Format::k31t => inst.fetch32(1) as i32,
+            Format::k31c | Format::k31i | Format::k31t => inst.fetch32(1)? as i32,
             // op AAAA BBBB
-            Format::k32x => inst.fetch16(2) as i32,
+            Format::k32x => inst.fetch16(2)? as i32,
             // op BBBBBBBBBBBBBBBBB
-            Format::k51l => wide_b(inst) as i32,
+            Format::k51l => wide_b(inst)? as i32,
             _ => {
                 return dex_err!(OperandAccessError {
                     insn_name: inst.name(),
@@ -455,13 +482,13 @@ pub mod vreg {
     pub fn C(inst: &Instruction<'_>) -> Result<i32> {
         Ok(match inst.format() {
             // op CCCC
-            Format::k22c | Format::k22s | Format::k22t => inst.fetch16(1) as i32,
+            Format::k22c | Format::k22s | Format::k22t => inst.fetch16(1)? as i32,
             // op CC|BB
-            Format::k22b | Format::k23x => ((inst.fetch16(1) >> 8) & 0xFF) as i32,
+            Format::k22b | Format::k23x => ((inst.fetch16(1)? >> 8) & 0xFF) as i32,
             // op BBBB CCCC
-            Format::k3rc | Format::k4rcc => inst.fetch16(2) as i32,
+            Format::k3rc | Format::k4rcc => inst.fetch16(2)? as i32,
             // op BBBB HH|CC
-            Format::k35c | Format::k45cc => (inst.fetch16(2) & 0x0F) as i32,
+            Format::k35c | Format::k45cc => (inst.fetch16(2)? & 0x0F) as i32,
             _ => {
                 return dex_err!(OperandAccessError {
                     insn_name: inst.name(),
@@ -485,7 +512,7 @@ pub mod vreg {
     #[inline]
     pub fn H(inst: &Instruction<'_>) -> Result<i32> {
         Ok(match &inst.format_desc().format {
-            Format::k45cc | Format::k4rcc => inst.fetch16(3) as i32,
+            Format::k45cc | Format::k4rcc => inst.fetch16(3)? as i32,
             _ => {
                 return dex_err!(OperandAccessError {
                     insn_name: inst.name(),
@@ -507,20 +534,22 @@ pub mod vreg {
     }
 
     #[inline]
-    pub fn var_args(inst: &Instruction<'_>) -> VarArgs {
-        let reg_list = inst.fetch16(2);
-        let count = inst_b(inst);
+    pub fn var_args(inst: &Instruction<'_>) -> Result<VarArgs> {
+        let reg_list = inst.fetch16(2)?;
+        let count = inst_b(inst)?;
         let mut var_args = VarArgs::new(count);
 
         // NOTE only five as maximum
-        debug_assert!(
-            count <= 5,
-            "Invalid arg count in {:?} ({count})",
-            inst.format()
-        );
+        if count > 5 {
+            return dex_err!(InvalidArgCount {
+                opcode: inst.name(),
+                format: inst.format(),
+                count
+            });
+        }
 
         if count > 4 {
-            var_args.arg[4] = inst_a(inst);
+            var_args.arg[4] = inst_a(inst)?;
         }
         if count > 3 {
             var_args.arg[3] = ((reg_list >> 12) & 0x0F) as u8;
@@ -534,7 +563,7 @@ pub mod vreg {
         if count > 0 {
             var_args.arg[0] = (reg_list & 0x0F) as u8;
         }
-        var_args
+        Ok(var_args)
     }
 
     //------------------------------------------------------------------------------
@@ -550,8 +579,16 @@ pub mod vreg {
 
     pub fn args_range(inst: &Instruction<'_>) -> Result<RangeInclusive<u16>> {
         let first_reg = vreg::C(inst)? as u16;
-        let last_reg = first_reg + (vreg::A(inst)? - 1) as u16;
-        Ok(first_reg..=last_reg)
+        let last_reg = vreg::A(inst)? as u16;
+        if last_reg == 0 || first_reg as usize + last_reg as usize > u16::MAX as usize {
+            return dex_err!(InvalidArgRange {
+                opcode: inst.name(),
+                format: inst.format(),
+                start: first_reg,
+                end: last_reg
+            });
+        }
+        Ok(first_reg..=(first_reg + last_reg - 1))
     }
 }
 

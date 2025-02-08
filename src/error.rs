@@ -2,6 +2,8 @@ use std::fmt::Debug;
 
 use thiserror::Error;
 
+use crate::file::Format;
+
 #[derive(Error)]
 pub enum DexError {
     #[error("Empty or truncated file")]
@@ -100,6 +102,38 @@ pub enum DexError {
         index: u32,
         next_index: u32,
         item_ty: &'static str,
+    },
+
+    #[error(
+        "{opcode}: Offset({offset}, relative code unit) should be within code stream size({size})"
+    )]
+    BadInstructionOffset {
+        opcode: &'static str,
+        offset: usize,
+        size: usize,
+    },
+
+    #[error("{opcode}: Could not fetch {target_type} at offset {offset} - code stream too small({size})")]
+    BadInstruction {
+        opcode: &'static str,
+        offset: usize,
+        size: usize,
+        target_type: &'static str,
+    },
+
+    #[error("{opcode}: Invalid argument count {count} for format {format:?}")]
+    InvalidArgCount {
+        opcode: &'static str,
+        format: &'static Format,
+        count: u8,
+    },
+
+    #[error("{opcode}: Invalid argument range {start}..{start}+{end} for format {format:?} - the range must at least cover one register")]
+    InvalidArgRange {
+        opcode: &'static str,
+        format: &'static Format,
+        start: u16,
+        end: u16,
     },
 }
 
