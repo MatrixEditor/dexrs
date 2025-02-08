@@ -1,0 +1,21 @@
+[package]
+name = "dexrs-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.dexrs]
+path = ".."
+
+[[bin]]
+name = "from_raw_parts"
+path = "fuzz_targets/from_raw_parts.rs"
+test = false
+doc = false
+bench = false
