@@ -73,19 +73,6 @@ pub struct DexFile<'a, T: DexContainer<'a> = Mmap> {
     location: DexLocation,
 }
 
-macro_rules! check_lt {
-    ($idx:expr, $count:expr, $item_ty:tt) => {
-        if $idx >= $count {
-            panic!(
-                "Index({}) of {} is bigger than maximum({})",
-                $idx,
-                stringify!($item_ty),
-                $count
-            );
-        }
-    };
-}
-
 macro_rules! check_lt_result {
     ($idx:expr, $count:expr, $item_ty:tt) => {
         if ($idx as usize) >= ($count as usize) {
@@ -96,6 +83,11 @@ macro_rules! check_lt_result {
             });
         }
     };
+}
+
+// writer
+impl<'a, C: DexContainerMut<'a>> DexFile<'a, C> {
+    //TODO
 }
 
 impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
@@ -360,6 +352,9 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
     }
 
     // method ids related methods
+    //------------------------------------------------------------------------------
+    // Method Ids
+    //------------------------------------------------------------------------------
     #[inline(always)]
     pub fn get_method_id(&self, idx: u32) -> Result<&'a MethodId> {
         check_lt_result!(idx, self.header.method_ids_size, MethodId);
@@ -378,11 +373,70 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
 
     // classdef related methods
     #[inline(always)]
-    pub fn get_class_def(&self, idx: u32) -> &'a ClassDef {
-        check_lt!(idx, self.header.class_defs_size, ClassDef);
-        &self.class_defs[idx as usize]
+    pub fn get_class_def(&self, idx: u32) -> Result<&'a ClassDef> {
+        check_lt_result!(idx, self.header.class_defs_size, ClassDef);
+        Ok(&self.class_defs[idx as usize])
     }
 
+    //------------------------------------------------------------------------------
+    // Method Handles
+    //------------------------------------------------------------------------------
+    #[inline(always)]
+    pub fn get_method_handle(&self, idx: u32) -> Result<&'a MethodHandleItem> {
+        check_lt_result!(idx, self.method_handles.len(), MethodHandleItem);
+        Ok(&self.method_handles[idx as usize])
+    }
+
+    #[inline(always)]
+    pub fn num_method_handles(&self) -> u32 {
+        self.method_handles.len() as u32
+    }
+
+    #[inline(always)]
+    pub fn get_method_handles(&self) -> &'a [MethodHandleItem] {
+        self.method_handles
+    }
+
+    //------------------------------------------------------------------------------
+    // CallSites
+    //------------------------------------------------------------------------------
+    #[inline(always)]
+    pub fn get_call_site_id(&self, idx: u32) -> Result<&'a CallSiteIdItem> {
+        check_lt_result!(idx, self.call_site_ids.len(), CallSiteIdItem);
+        Ok(&self.call_site_ids[idx as usize])
+    }
+
+    #[inline(always)]
+    pub fn num_call_site_ids(&self) -> u32 {
+        self.call_site_ids.len() as u32
+    }
+
+    #[inline(always)]
+    pub fn get_call_site_ids(&self) -> &'a [CallSiteIdItem] {
+        self.call_site_ids
+    }
+
+    //------------------------------------------------------------------------------
+    // TryItem
+    //------------------------------------------------------------------------------
+    pub fn get_try_item(&'a self, ca: &CodeItemAccessor<'_>) -> Result<&'a [TryItem]> {
+        let offset = (ca.code_off() as usize)
+            + std::mem::size_of::<CodeItem>()
+            + ca.insns_size_in_code_units() as usize;
+        // must be 4-byte aligned
+        let offset = (offset + 3) & !3;
+        self.get_try_items_raw(offset as u32, ca.tries_size() as u16)
+    }
+
+    #[inline]
+    pub fn get_try_items_raw(&'a self, tries_off: u32, tries_size: u16) -> Result<&'a [TryItem]> {
+        check_lt_result!(tries_off, self.file_size(), TryItem);
+        self.non_null_array_data_ptr(tries_off, tries_size as usize)
+    }
+
+    //------------------------------------------------------------------------------
+    // ClassDefs
+    //------------------------------------------------------------------------------
     #[inline(always)]
     pub fn num_class_defs(&self) -> u32 {
         self.header.class_defs_size

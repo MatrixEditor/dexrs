@@ -1,6 +1,5 @@
-use std::ops::Deref;
-
-use memmap2::MmapAsRawDesc;
+use std::ops::{Deref, DerefMut};
+use memmap2::{MmapAsRawDesc, MmapMut};
 
 use crate::Result;
 
@@ -13,6 +12,12 @@ pub trait DexContainer<'a>: AsRef<[u8]> + Deref<Target = [u8]> + 'a {
 
     fn file_size(&'a self) -> usize {
         self.data().len()
+    }
+}
+
+pub trait DexContainerMut<'a>: DexContainer<'a> + DerefMut {
+    fn data_mut(&'a mut self) -> &'a mut [u8] {
+        self.deref_mut()
     }
 }
 
@@ -90,3 +95,12 @@ impl DexFileContainer {
         &self.mmap
     }
 }
+
+impl DexContainer<'_> for MmapMut {}
+impl DexContainerMut<'_> for MmapMut {}
+
+impl<'a> DexContainer<'a> for &'a mut [u8] {}
+impl<'a> DexContainerMut<'a> for &'a mut [u8] {}
+
+impl DexContainer<'_> for Vec<u8> {}
+impl DexContainerMut<'_> for Vec<u8> {}

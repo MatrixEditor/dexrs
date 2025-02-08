@@ -3,6 +3,7 @@ use crate::Result;
 use super::{CodeItem, DexContainer, DexFile, Instruction};
 
 pub struct CodeItemAccessor<'a> {
+    code_off: u32,
     code_item: &'a CodeItem,
     insns: &'a [u16],
 }
@@ -41,7 +42,15 @@ impl<'a> CodeItemAccessor<'a> {
             0 => &[],
             _ => dex.get_insns_raw(code_off, code_item.insns_size)?,
         };
-        Ok(CodeItemAccessor { code_item, insns })
+        Ok(CodeItemAccessor {
+            code_off,
+            code_item,
+            insns,
+        })
+    }
+
+    pub fn code_off(&self) -> u32 {
+        self.code_off
     }
 
     pub fn code_item(&self) -> &'a CodeItem {

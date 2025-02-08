@@ -179,3 +179,13 @@ pub struct CodeItem {
 
 
 unsafe impl plain::Plain for CodeItem {}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct TryItem {
+    pub start_addr: u32,
+    pub insn_count: u16,
+    pub handler_off: u16,
+}
+
+unsafe impl plain::Plain for TryItem {}
