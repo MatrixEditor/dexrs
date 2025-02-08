@@ -388,7 +388,7 @@ impl<'a, T: ClassItemBase> Iterator for DataIterator<'a, T> {
             }
             match self.value.read(&self.class_data, &mut self.off) {
                 Ok(()) => {}
-                Err(e) => {
+                Err(_) => {
                     self.pos = self.end_pos;
                     // REVISIT: error propagation
                     return None;

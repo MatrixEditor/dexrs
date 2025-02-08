@@ -17,6 +17,8 @@ pub use code_item_accessors::*;
 pub mod container;
 pub mod dump;
 pub use container::*;
+pub mod annotations;
+pub use annotations::*;
 
 use crate::{dex_err, error::DexError, leb128::decode_leb128, utf, Result};
 
@@ -184,7 +186,7 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
     // -- strings
     #[inline(always)]
     pub fn get_string_id(&self, idx: u32) -> Result<&'a StringId> {
-        check_lt_result!(idx, self.num_string_ids(), StringId);
+        check_lt_result!(idx, self.string_ids.len(), StringId);
         Ok(&self.string_ids[idx as usize])
     }
 
@@ -315,7 +317,7 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
     // -- fields
     #[inline]
     pub fn get_field_id(&self, idx: u32) -> Result<&'a FieldId> {
-        check_lt_result!(idx, self.header.field_ids_size, FieldId);
+        check_lt_result!(idx, self.field_ids.len(), FieldId);
         Ok(&self.field_ids[idx as usize])
     }
 
@@ -330,7 +332,7 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
 
     // Proto related methods
     pub fn get_proto_id(&self, idx: ProtoIndex) -> Result<&'a ProtoId> {
-        check_lt_result!(idx, self.header.proto_ids_size, ProtoId);
+        check_lt_result!(idx, self.proto_ids.len(), ProtoId);
         Ok(&self.proto_ids[idx as usize])
     }
 
@@ -366,7 +368,7 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
     //------------------------------------------------------------------------------
     #[inline(always)]
     pub fn get_method_id(&self, idx: u32) -> Result<&'a MethodId> {
-        check_lt_result!(idx, self.header.method_ids_size, MethodId);
+        check_lt_result!(idx, self.method_ids.len(), MethodId);
         Ok(&self.method_ids[idx as usize])
     }
 
@@ -444,6 +446,47 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
     }
 
     //------------------------------------------------------------------------------
+    // Annotations
+    //------------------------------------------------------------------------------
+    // see implementation in annotations.rs for accessor
+    pub fn get_annotation_set(&'a self, off: u32) -> Result<AnnotationSetItem<'a>> {
+        // this will not panic if offset is zero
+        check_lt_result!(off, self.file_size(), AnnotationSetItem);
+        match self.data_ptr::<u32>(off)? {
+            None => Ok(&[]),
+            Some(size) => {
+                let off = off as usize + std::mem::size_of::<u32>();
+                check_lt_result!(off, self.file_size(), AnnotationSetItem);
+                self.non_null_array_data_ptr(off as u32, *size as usize)
+            }
+        }
+    }
+
+    #[inline(always)]
+    pub fn get_field_annotation_set(
+        &'a self,
+        anno_item: &FieldAnnotationsItem,
+    ) -> Result<AnnotationSetItem<'a>> {
+        self.get_annotation_set(anno_item.annotations_off)
+    }
+
+    #[inline(always)]
+    pub fn get_method_annotation_set(
+        &'a self,
+        anno_item: &MethodAnnotationsItem,
+    ) -> Result<AnnotationSetItem<'a>> {
+        self.get_annotation_set(anno_item.annotations_off)
+    }
+
+    #[inline(always)]
+    pub fn get_parameter_annotation_set(
+        &'a self,
+        anno_item: &ParameterAnnotationsItem,
+    ) -> Result<AnnotationSetItem<'a>> {
+        self.get_annotation_set(anno_item.annotations_off)
+    }
+
+    //------------------------------------------------------------------------------
     // ClassDefs
     //------------------------------------------------------------------------------
     #[inline(always)]
@@ -487,15 +530,14 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
 
     // private methods
     #[inline]
-    fn data_ptr<T: Plain>(&self, offset: u32) -> Result<Option<&'a T>> {
+    pub fn data_ptr<T: Plain>(&self, offset: u32) -> Result<Option<&'a T>> {
         match offset {
             0 => Ok(None),
             _ => Ok(Some(self.non_null_data_ptr(offset)?)),
         }
     }
 
-    #[inline]
-    fn non_null_data_ptr<T: Plain>(&self, offset: u32) -> Result<&'a T> {
+    pub fn non_null_data_ptr<T: Plain>(&self, offset: u32) -> Result<&'a T> {
         if offset == 0 {
             panic!(
                 "Attempted to read a null pointer for data type {:?}.",
@@ -516,15 +558,14 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
     }
 
     #[inline]
-    fn array_data_ptr<T: Plain>(&self, offset: u32, len: usize) -> Result<Option<&'a [T]>> {
+    pub fn array_data_ptr<T: Plain>(&self, offset: u32, len: usize) -> Result<Option<&'a [T]>> {
         match offset {
             0 => Ok(None),
             _ => Ok(Some(self.non_null_array_data_ptr(offset, len)?)),
         }
     }
 
-    #[inline]
-    fn non_null_array_data_ptr<T: Plain>(&self, offset: u32, len: usize) -> Result<&'a [T]> {
+    pub fn non_null_array_data_ptr<T: Plain>(&self, offset: u32, len: usize) -> Result<&'a [T]> {
         if offset == 0 {
             panic!(
                 "Attempted to read a null pointer for data type {:?}.",

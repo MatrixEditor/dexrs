@@ -178,7 +178,6 @@ pub struct CodeItem {
     pub insns_size: u32,
 }
 
-
 unsafe impl plain::Plain for CodeItem {}
 
 #[repr(C)]
@@ -228,3 +227,5 @@ pub struct ParameterAnnotationsItem {
 }
 
 unsafe impl plain::Plain for ParameterAnnotationsItem {}
+
+pub type AnnotationSetItem<'a> = &'a [u32];

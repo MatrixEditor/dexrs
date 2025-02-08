@@ -1,16 +1,17 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use dexrs::file::{DexFile, DexLocation, InMemoryDexContainer};
-use std::hint::black_box;
+use dexrs::file::{DexFile, DexLocation, Header, InMemoryDexContainer};
 
 fn parse_and_verify_small_file(c: &mut Criterion) {
     let data = include_bytes!("../tests/prime/prime.dex");
     c.bench_function("parse_and_verify_small_file", |b| {
         b.iter(|| {
-            let buf = black_box(data);
-            let container = InMemoryDexContainer::new(buf);
+            let container = InMemoryDexContainer::new(data);
             if let Ok(dex) = DexFile::from_raw_parts(&container, DexLocation::InMemory) {
                 if DexFile::verify(&dex, true).is_ok() {
-                    black_box(dex);
+                    assert_eq!(
+                        dex.expected_header_size(),
+                        std::mem::size_of::<Header>() as u32
+                    );
                 }
             }
         })
@@ -21,10 +22,12 @@ fn parse_small_file(c: &mut Criterion) {
     let data = include_bytes!("../tests/prime/prime.dex");
     c.bench_function("parse_small_file", |b| {
         b.iter(|| {
-            let buf = black_box(data);
-            let container = InMemoryDexContainer::new(buf);
+            let container = InMemoryDexContainer::new(data);
             if let Ok(dex) = DexFile::from_raw_parts(&container, DexLocation::InMemory) {
-                black_box(dex);
+                assert_eq!(
+                    dex.expected_header_size(),
+                    std::mem::size_of::<Header>() as u32
+                );
             }
         })
     });

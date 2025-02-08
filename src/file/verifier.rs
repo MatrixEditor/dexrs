@@ -16,6 +16,7 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
         DEX_MAGIC_VERSIONS.contains(&version_raw)
     }
 
+    // TODO: can be changed into enum
     pub fn verify(dex: &DexFile<'a, C>, verify_checksum: bool) -> Result<()> {
         check_header(dex, verify_checksum)?;
         //  REVISIT: maybe validate map list items
