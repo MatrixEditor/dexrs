@@ -4,20 +4,35 @@ use crate::{
     Result,
 };
 
-use super::{vreg, Code, DexFile, Format, Instruction, MethodId, StringId, TypeId};
+use super::{vreg, Code, DexContainer, DexFile, Format, Instruction, MethodId, StringId, TypeId};
 
-impl<'a> DexFile<'a> {
-    pub fn pretty_field(&self, field_idx: u32, with_type: bool) -> String {
-        match self.pretty_field_opt(field_idx, with_type) {
+pub mod pretty_opts {
+
+    #[derive(Copy, Clone, PartialEq, Eq)]
+    pub enum Field {
+        WithType,
+        NoType,
+    }
+
+    #[derive(Copy, Clone, PartialEq, Eq)]
+    pub enum Method {
+        WithSig,
+        NoSig,
+    }
+}
+
+impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
+    pub fn pretty_field(&self, field_idx: u32, opts: pretty_opts::Field) -> String {
+        match self.pretty_field_opt(field_idx, opts) {
             Ok(s) => s,
             Err(_) => format!("<<invalid-field-idx-{field_idx}>>"),
         }
     }
 
-    pub fn pretty_field_opt(&self, field_idx: u32, with_type: bool) -> Result<String> {
+    pub fn pretty_field_opt(&self, field_idx: u32, opts: pretty_opts::Field) -> Result<String> {
         let field_id = self.get_field_id(field_idx)?;
         let mut result = String::new();
-        if with_type {
+        if opts == pretty_opts::Field::WithType {
             result.push_str(&self.pretty_type_opt_at(field_id.type_idx)?);
             result.push_str(" ");
         }
@@ -57,23 +72,26 @@ impl<'a> DexFile<'a> {
         })
     }
 
-    pub fn pretty_method_at(&self, method_idx: u32, with_sig: bool) -> String {
-        match self.pretty_method_opt_at(method_idx, with_sig) {
+    pub fn pretty_method_at(&self, method_idx: u32, opts: pretty_opts::Method) -> String {
+        match self.pretty_method_opt_at(method_idx, opts) {
             Ok(s) => s,
             Err(_) => format!("<<invalid-method-idx-{method_idx}>>"),
         }
     }
 
-    pub fn pretty_method_opt_at(&self, idx: u32, with_sig: bool) -> Result<String> {
-        self.pretty_method_opt(self.get_method_id(idx)?, with_sig)
+    pub fn pretty_method_opt_at(&self, idx: u32, opts: pretty_opts::Method) -> Result<String> {
+        self.pretty_method_opt(self.get_method_id(idx)?, opts)
     }
 
-    pub fn pretty_method_opt(&self, method_id: &MethodId, with_sig: bool) -> Result<String> {
+    pub fn pretty_method_opt(
+        &self,
+        method_id: &MethodId,
+        opts: pretty_opts::Method,
+    ) -> Result<String> {
         let mut result = String::new();
-        let proto_id = if with_sig {
-            Some(self.get_proto_id(method_id.proto_idx)?)
-        } else {
-            None
+        let proto_id = match opts {
+            pretty_opts::Method::WithSig => Some(self.get_proto_id(method_id.proto_idx)?),
+            pretty_opts::Method::NoSig => None,
         };
 
         if let Some(proto_id) = proto_id {
@@ -181,7 +199,7 @@ impl<'a> Instruction<'a> {
                         format!(
                             "{opcode} v{}, {} // field@{}",
                             vreg::A(self)?,
-                            dex.pretty_field(field_idx, true),
+                            dex.pretty_field(field_idx, pretty_opts::Field::WithType),
                             field_idx
                         )
                     }
@@ -220,7 +238,7 @@ impl<'a> Instruction<'a> {
                             "{opcode} v{}, v{}, {} // field@{}",
                             vreg::A(self)?,
                             vreg::B(self)?,
-                            dex.pretty_field(index, true),
+                            dex.pretty_field(index, pretty_opts::Field::WithType),
                             index
                         )
                     }
@@ -287,7 +305,7 @@ impl<'a> Instruction<'a> {
                     ) => {
                         format!(
                             "{opcode} {{{args_str}}}, {} // method@{}",
-                            dex.pretty_method_at(index, true),
+                            dex.pretty_method_at(index, pretty_opts::Method::WithSig),
                             index
                         )
                     }
@@ -315,7 +333,7 @@ impl<'a> Instruction<'a> {
                             "{opcode} {{v{} .. v{}}}, {} // method@{}",
                             var_range.start(),
                             var_range.end(),
-                            dex.pretty_method_at(index, true),
+                            dex.pretty_method_at(index, pretty_opts::Method::WithSig),
                             index
                         )
                     }
@@ -350,7 +368,7 @@ impl<'a> Instruction<'a> {
                 if let Some(dex) = dex_file {
                     format!(
                         "{opcode} {{{args_str}}}, {}, {} // method@{}, proto@{}",
-                        dex.pretty_method_at(method_idx, true),
+                        dex.pretty_method_at(method_idx, pretty_opts::Method::WithSig),
                         dex.get_shorty_lossy_at(proto_idx as ProtoIndex)?,
                         method_idx,
                         proto_idx
@@ -372,7 +390,7 @@ impl<'a> Instruction<'a> {
                             "{opcode} {{v{} .. v{}}}, {}, {} // method@{}, proto@{}",
                             args_range.start(),
                             args_range.end(),
-                            dex.pretty_method_at(method_idx, true),
+                            dex.pretty_method_at(method_idx, pretty_opts::Method::WithSig),
                             dex.get_shorty_lossy_at(proto_idx as ProtoIndex)?,
                             method_idx,
                             proto_idx
