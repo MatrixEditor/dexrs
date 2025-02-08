@@ -1,4 +1,4 @@
-use memmap2::{Mmap, MmapAsRawDesc};
+use memmap2::Mmap;
 use plain::Plain;
 
 pub mod structs;
@@ -14,7 +14,9 @@ pub mod instruction;
 pub use instruction::*;
 pub mod code_item_accessors;
 pub use code_item_accessors::*;
+pub mod container;
 pub mod dump;
+pub use container::*;
 
 use crate::{dex_err, error::DexError, leb128::decode_leb128, utf, Result};
 
@@ -29,56 +31,32 @@ pub const DEX_MAGIC_VERSIONS: &[&[u8]] = &[
 
 pub const DEX_ENDIAN_CONSTANT: u32 = 0x12345678;
 
-pub struct DexFileContainer {
-    mmap: memmap2::Mmap,
-    location: String,
-    pub verify: bool,
-    pub verify_checksum: bool,
+#[derive(Debug)]
+pub enum DexLocation {
+    InMemory,
+    Path(String),
 }
 
-impl DexFileContainer {
-    pub fn new<T>(file: T) -> Self
-    where
-        T: MmapAsRawDesc,
-    {
-        Self {
-            mmap: unsafe { memmap2::Mmap::map(file).unwrap() },
-            verify: false,
-            verify_checksum: false,
-            location: "[anonymous]".to_string(),
+impl From<&'static str> for DexLocation {
+    fn from(s: &'static str) -> Self {
+        DexLocation::Path(s.to_string())
+    }
+}
+
+impl ToString for DexLocation {
+    fn to_string(&self) -> String {
+        match self {
+            DexLocation::InMemory => "[in-memory]".to_string(),
+            DexLocation::Path(path) => path.to_string(),
         }
     }
-
-    pub fn location(&mut self, location: String) -> &mut Self {
-        self.location = location;
-        self
-    }
-
-    pub fn verify(mut self, verify: bool) -> Self {
-        self.verify = verify;
-        self
-    }
-
-    pub fn verify_checksum(mut self, verify_checksum: bool) -> Self {
-        self.verify_checksum = verify_checksum;
-        self
-    }
-
-    pub fn open(&self) -> Result<DexFile<'_>> {
-        DexFile::open(self)
-    }
-
-    pub fn get_location(&self) -> &str {
-        &self.location
-    }
-
-    pub fn data(&self) -> &memmap2::Mmap {
-        &self.mmap
-    }
 }
 
-pub struct DexFile<'a> {
-    mmap: &'a memmap2::Mmap,
+pub type InMemoryDexFile<'a> = DexFile<'a, InMemoryDexContainer<'a>>;
+pub type MmapDexFile<'a> = DexFile<'a, Mmap>;
+
+pub struct DexFile<'a, T: DexContainer<'a> = Mmap> {
+    mmap: &'a T,
     header: &'a Header,
 
     string_ids: &'a [StringId],
@@ -92,7 +70,7 @@ pub struct DexFile<'a> {
 
     hiddenapi_data: Option<&'a HiddenapiClassData<'a>>,
 
-    location: String,
+    location: DexLocation,
 }
 
 macro_rules! check_lt {
@@ -120,10 +98,21 @@ macro_rules! check_lt_result {
     };
 }
 
-impl<'a> DexFile<'a> {
-    pub fn get_section<T: Plain>(base: &'a Mmap, offset: u32, len: u32) -> &'a [T] {
+impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
+    #[inline]
+    fn header_available(base: &'a C) -> bool {
         let size = base.len();
-        if size < std::mem::size_of::<Header>() || len == 0 {
+        size >= std::mem::size_of::<Header>() && plain::is_aligned::<Header>(base)
+    }
+
+    pub fn get_section<T: Plain>(base: &'a C, offset: u32, len: u32) -> &'a [T] {
+        if len == 0 {
+            return &[];
+        }
+        // sanity checks so that this funtion will always return a valid slice
+        let size = base.len();
+        let section_size = len as usize * std::mem::size_of::<T>();
+        if (offset as usize + section_size) >= size || offset as usize >= size {
             return &[];
         }
 
@@ -134,8 +123,16 @@ impl<'a> DexFile<'a> {
         }
     }
 
-    pub fn from_raw_parts(base: &'a Mmap, location: &str) -> Self {
-        let header = Header::from_bytes(&base).unwrap();
+    pub fn from_raw_parts(base: &'a C, location: DexLocation) -> Result<DexFile<'a, C>> {
+        if !DexFile::header_available(base) {
+            return dex_err!(TruncatedFile);
+        }
+
+        let header = match Header::from_bytes(&base) {
+            Ok(header) => header,
+            // REVISIT: we already checked the header
+            Err(_) => return dex_err!(TruncatedFile),
+        };
         let mut dex = Self {
             mmap: base,
             header,
@@ -148,25 +145,21 @@ impl<'a> DexFile<'a> {
             method_handles: &[],
             call_site_ids: &[],
             hiddenapi_data: None,
-            location: location.to_string(),
+            location,
         };
 
-        if dex.file_size() < std::mem::size_of::<Header>() {
-            return dex; // don't parse data
-        }
-
         dex.init_sections_from_maplist();
-        dex
+        Ok(dex)
     }
 
-    pub fn open(container: &DexFileContainer) -> Result<DexFile<'_>> {
+    pub fn open(container: &DexFileContainer) -> Result<MmapDexFile<'_>> {
         let loc = container.get_location();
         let size = container.data().len();
         if size < std::mem::size_of::<Header>() {
             return dex_err!(DexFileError, "Invalid or truncated file {:?}", loc);
         }
 
-        let dex = DexFile::from_raw_parts(container.data(), &loc);
+        let dex = DexFile::from_raw_parts(container.data(), DexLocation::Path(loc.to_string()))?;
         dex.init()?;
         if container.verify {
             DexFile::verify(&dex, container.verify_checksum)?;
@@ -187,7 +180,7 @@ impl<'a> DexFile<'a> {
         }
     }
 
-    pub fn get_location(&self) -> &str {
+    pub fn get_location(&self) -> &DexLocation {
         &self.location
     }
 
@@ -302,11 +295,11 @@ impl<'a> DexFile<'a> {
     }
 
     #[inline(always)]
-    pub fn get_code_item_accessor(&self, offset: u32) -> Result<CodeItemAccessor<'_>> {
+    pub fn get_code_item_accessor(&'a self, offset: u32) -> Result<CodeItemAccessor<'a>> {
         check_lt_result!(offset, self.file_size(), "code item offset");
         let code_item = self.non_null_data_ptr(offset)?;
         CodeItemAccessor::from_code_item(
-            &self,
+            self,
             code_item,
             offset + std::mem::size_of::<CodeItem>() as u32,
         )
@@ -544,16 +537,30 @@ impl<'a> DexFile<'a> {
         Ok(())
     }
 
+    #[inline]
+    fn maplist_available(&self) -> bool {
+        if self.header.map_off == 0x00 {
+            return false;
+        }
+
+        let size = self.file_size();
+        let end = (self.header.map_off as usize) + std::mem::size_of::<u32>();
+        end as usize > size || !plain::is_aligned::<u32>(&self.mmap[0..end as usize])
+    }
+
     fn init_sections_from_maplist(&mut self) {
-        if self.header.map_off == 0x00
-            || self.header.map_off as usize > self.file_size() - std::mem::size_of::<MapList>()
-        {
+        if !self.maplist_available() {
             // bad offset
             return;
         }
 
         let map_list_size_off = self.header.map_off;
-        let map_list_off = self.header.map_off + std::mem::size_of::<u32>() as u32;
+        let map_list_off = (self.header.map_off as usize) + std::mem::size_of::<u32>();
+        if map_list_off >= self.file_size() as usize {
+            // bad offset
+            return;
+        }
+
         let count: &u32 = match self.non_null_data_ptr(map_list_size_off) {
             Ok(v) => v,
             Err(_) => {
@@ -571,22 +578,23 @@ impl<'a> DexFile<'a> {
         }
 
         // we should unwrap this here
-        let items = match self.non_null_array_data_ptr::<MapItem>(map_list_off, *count as usize) {
-            Ok(v) => v,
-            Err(_) => {
-                // bad file will be reported through verifier
-                return;
-            }
-        };
+        let items =
+            match self.non_null_array_data_ptr::<MapItem>(map_list_off as u32, *count as usize) {
+                Ok(v) => v,
+                Err(_) => {
+                    // bad file will be reported through verifier
+                    return;
+                }
+            };
         for map_item in items {
             match map_item.type_ {
                 MapItemType::MethodHandleItem => {
                     self.method_handles =
-                        DexFile::get_section(&self.mmap, map_item.off, map_item.size)
+                        DexFile::get_section(self.mmap, map_item.off, map_item.size)
                 }
                 MapItemType::CallSiteIdItem => {
                     self.call_site_ids =
-                        DexFile::get_section(&self.mmap, map_item.off, map_item.size)
+                        DexFile::get_section(self.mmap, map_item.off, map_item.size)
                 }
                 MapItemType::HiddenapiClassData => {
                     let item_off = map_item.off as usize;

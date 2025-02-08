@@ -8,16 +8,19 @@ impl<'a> Instruction<'a> {
 
     #[inline(always)]
     pub fn relative_at(&self, offset: usize) -> Instruction<'a> {
+        debug_assert!(offset < self.0.len());
         Instruction::at(&self.0[offset..])
     }
 
     #[inline(always)]
     pub fn fetch16(&self, offset: usize) -> u16 {
+        debug_assert!(offset < self.0.len());
         self.0[offset]
     }
 
     #[inline(always)]
     pub fn fetch32(&self, offset: usize) -> u32 {
+        debug_assert!(offset + 1 < self.0.len());
         self.fetch16(offset) as u32 | ((self.fetch16(offset + 1) as u32) << 16)
     }
 
@@ -216,7 +219,7 @@ impl<'a> Instruction<'a> {
         let size = Instruction::format_desc_of(self.opcode()).size_in_code_units;
         match size {
             code_flags::Complex => self.size_in_code_units_complex(),
-            code_flags::Custom => 1, /* TODO */
+            code_flags::Custom => 1, /* TODO? */
             _ => size as usize,
         }
     }

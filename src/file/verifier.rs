@@ -3,10 +3,10 @@ use adler32;
 use crate::{dex_err, error::DexError, Result};
 
 use super::{
-    DexFile, Header, HeaderV41, DEX_ENDIAN_CONSTANT, DEX_MAGIC, DEX_MAGIC_VERSIONS,
+    DexContainer, DexFile, Header, HeaderV41, DEX_ENDIAN_CONSTANT, DEX_MAGIC, DEX_MAGIC_VERSIONS,
 };
 
-impl<'a> DexFile<'a> {
+impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
     pub fn is_magic_valid(&self) -> bool {
         &self.header.get_magic()[..4] == DEX_MAGIC
     }
@@ -16,7 +16,7 @@ impl<'a> DexFile<'a> {
         DEX_MAGIC_VERSIONS.contains(&version_raw)
     }
 
-    pub fn verify(dex: &DexFile<'_>, verify_checksum: bool) -> Result<()> {
+    pub fn verify(dex: &DexFile<'a, C>, verify_checksum: bool) -> Result<()> {
         check_header(dex, verify_checksum)?;
         //  REVISIT: maybe validate map list items
         Ok(())
@@ -29,7 +29,10 @@ impl<'a> DexFile<'a> {
     }
 }
 
-fn check_header(dex: &DexFile<'_>, verify_checksum: bool) -> Result<()> {
+fn check_header<'a, C>(dex: &DexFile<'a, C>, verify_checksum: bool) -> Result<()>
+where
+    C: DexContainer<'a>,
+{
     let size = dex.file_size();
     if size < std::mem::size_of::<Header>() {
         return dex_err!(TruncatedFile);
@@ -40,7 +43,9 @@ fn check_header(dex: &DexFile<'_>, verify_checksum: bool) -> Result<()> {
     }
 
     if !dex.is_version_valid() {
-        return dex_err!(UnknownDexVersion { version: dex.header.get_version() });
+        return dex_err!(UnknownDexVersion {
+            version: dex.header.get_version()
+        });
     }
 
     // check file size from header
@@ -131,12 +136,15 @@ fn check_header(dex: &DexFile<'_>, verify_checksum: bool) -> Result<()> {
     Ok(())
 }
 
-fn check_valid_offset_and_size(
-    dex: &DexFile<'_>,
+fn check_valid_offset_and_size<'a, C>(
+    dex: &DexFile<'a, C>,
     offset: u32,
     size: u32,
     label: &'static str,
-) -> Result<()> {
+) -> Result<()>
+where
+    C: DexContainer<'a>,
+{
     if size == 0 {
         if offset != 0 {
             return dex_err!(BadOffsetNoSize {

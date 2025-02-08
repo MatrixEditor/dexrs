@@ -1,6 +1,6 @@
 use crate::Result;
 
-use super::{CodeItem, DexFile, Instruction};
+use super::{CodeItem, DexContainer, DexFile, Instruction};
 
 pub struct CodeItemAccessor<'a> {
     code_item: &'a CodeItem,
@@ -29,11 +29,14 @@ impl<'a> CodeItemAccessor<'a> {
     }
 
     #[inline(always)]
-    pub fn from_code_item(
-        dex: &'a DexFile<'a>,
+    pub fn from_code_item<C>(
+        dex: &'a DexFile<'a, C>,
         code_item: &'a CodeItem,
         code_off: u32,
-    ) -> Result<CodeItemAccessor<'a>> {
+    ) -> Result<CodeItemAccessor<'a>>
+    where
+        C: DexContainer<'a>,
+    {
         let insns = match code_off {
             0 => &[],
             _ => dex.get_insns_raw(code_off, code_item.insns_size)?,
