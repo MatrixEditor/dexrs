@@ -19,6 +19,7 @@ pub mod dump;
 pub use container::*;
 pub mod annotations;
 pub use annotations::*;
+use verifier::VerifyPreset;
 
 use crate::{dex_err, error::DexError, leb128::decode_leb128, utf, Result};
 
@@ -156,7 +157,15 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
         let dex = DexFile::from_raw_parts(container.data(), DexLocation::Path(loc.to_string()))?;
         dex.init()?;
         if container.verify {
-            DexFile::verify(&dex, container.verify_checksum)?;
+            DexFile::verify(
+                &dex,
+                if container.verify_checksum {
+                    // currenlty supports only checksum
+                    VerifyPreset::ChecksumOnly
+                } else {
+                    VerifyPreset::None
+                },
+            )?;
         }
         Ok(dex)
     }

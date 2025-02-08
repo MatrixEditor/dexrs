@@ -6,6 +6,12 @@ use super::{
     DexContainer, DexFile, Header, HeaderV41, DEX_ENDIAN_CONSTANT, DEX_MAGIC, DEX_MAGIC_VERSIONS,
 };
 
+pub enum VerifyPreset {
+    None,
+    All,
+    ChecksumOnly,
+}
+
 impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
     pub fn is_magic_valid(&self) -> bool {
         &self.header.get_magic()[..4] == DEX_MAGIC
@@ -17,8 +23,8 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
     }
 
     // TODO: can be changed into enum
-    pub fn verify(dex: &DexFile<'a, C>, verify_checksum: bool) -> Result<()> {
-        check_header(dex, verify_checksum)?;
+    pub fn verify(dex: &DexFile<'a, C>, preset: VerifyPreset) -> Result<()> {
+        check_header(dex, preset)?;
         //  REVISIT: maybe validate map list items
         Ok(())
     }
@@ -30,7 +36,7 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
     }
 }
 
-fn check_header<'a, C>(dex: &DexFile<'a, C>, verify_checksum: bool) -> Result<()>
+fn check_header<'a, C>(dex: &DexFile<'a, C>, preset: VerifyPreset) -> Result<()>
 where
     C: DexContainer<'a>,
 {
@@ -84,15 +90,18 @@ where
         return dex_err!(UnexpectedEndianess, dex.header.endian_tag);
     }
 
-    if verify_checksum {
-        let checksum = dex.calculate_checksum();
-        if checksum != dex.header.checksum {
-            return dex_err!(BadChecksum {
-                actual: checksum,
-                expected: dex.header.checksum
-            });
+    match &preset {
+        VerifyPreset::All | VerifyPreset::ChecksumOnly => {
+            let checksum = dex.calculate_checksum();
+            if checksum != dex.header.checksum {
+                return dex_err!(BadChecksum {
+                    actual: checksum,
+                    expected: dex.header.checksum
+                });
+            }
         }
-    }
+        _ => {}
+    };
 
     let header = dex.header;
     check_valid_offset_and_size(dex, header.link_off, header.link_size, "link")?;
