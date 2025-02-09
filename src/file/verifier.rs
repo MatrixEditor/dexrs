@@ -6,6 +6,7 @@ use super::{
     DexContainer, DexFile, Header, HeaderV41, DEX_ENDIAN_CONSTANT, DEX_MAGIC, DEX_MAGIC_VERSIONS,
 };
 
+#[derive(Debug, PartialEq, Eq)]
 pub enum VerifyPreset {
     None,
     All,

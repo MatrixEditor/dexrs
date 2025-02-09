@@ -163,6 +163,15 @@ pub enum DexError {
         offset: usize,
         max: usize,
     },
+
+    #[error(
+        "Got invalid object reference({offset}) which is out of bounds (start: {start}, end: {end})"
+    )]
+    UnknownObjectRef {
+        offset: usize,
+        start: usize,
+        end: usize,
+    },
 }
 
 #[macro_export]

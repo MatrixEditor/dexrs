@@ -41,3 +41,10 @@ path = "fuzz_targets/encoded_item.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "mutf8"
+path = "fuzz_targets/mutf8.rs"
+test = false
+doc = false
+bench = false

@@ -1,4 +1,4 @@
-use memmap2::Mmap;
+use memmap2::{Mmap, MmapMut};
 use plain::Plain;
 
 pub mod structs;
@@ -57,6 +57,7 @@ impl ToString for DexLocation {
 
 pub type InMemoryDexFile<'a> = DexFile<'a, InMemoryDexContainer<'a>>;
 pub type MmapDexFile<'a> = DexFile<'a, Mmap>;
+pub type MmapMutDexFile<'a> = DexFile<'a, MmapMut>;
 
 pub struct DexFile<'a, T: DexContainer<'a> = Mmap> {
     mmap: &'a T,
@@ -147,25 +148,34 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
         Ok(dex)
     }
 
-    pub fn open(container: &DexFileContainer) -> Result<MmapDexFile<'_>> {
+    pub fn open_file(container: &'a DexFileContainer) -> Result<MmapDexFile<'a>> {
         let loc = container.get_location();
         let size = container.data().len();
         if size < std::mem::size_of::<Header>() {
             return dex_err!(DexFileError, "Invalid or truncated file {:?}", loc);
         }
 
-        let dex = DexFile::from_raw_parts(container.data(), DexLocation::Path(loc.to_string()))?;
+        DexFile::open(
+            container.data(),
+            DexLocation::Path(loc.to_string()),
+            if container.verify_checksum {
+                // currenlty supports only checksum
+                VerifyPreset::ChecksumOnly
+            } else {
+                VerifyPreset::None
+            },
+        )
+    }
+
+    pub fn open(
+        container: &'a C,
+        location: DexLocation,
+        verify_preset: VerifyPreset,
+    ) -> Result<DexFile<'a, C>> {
+        let dex = DexFile::from_raw_parts(container, location)?;
         dex.init()?;
-        if container.verify {
-            DexFile::verify(
-                &dex,
-                if container.verify_checksum {
-                    // currenlty supports only checksum
-                    VerifyPreset::ChecksumOnly
-                } else {
-                    VerifyPreset::None
-                },
-            )?;
+        if verify_preset != VerifyPreset::None {
+            DexFile::verify(&dex, verify_preset)?;
         }
         Ok(dex)
     }
@@ -192,11 +202,18 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
         self.mmap.len()
     }
 
-    // -- strings
+    // ------------------------------------------------------------------------------
+    // strings
+    // ------------------------------------------------------------------------------
     #[inline(always)]
     pub fn get_string_id(&self, idx: u32) -> Result<&'a StringId> {
         check_lt_result!(idx, self.string_ids.len(), StringId);
         Ok(&self.string_ids[idx as usize])
+    }
+
+    #[inline(always)]
+    pub fn string_id_idx(&self, item: &'a StringId) -> Result<u32> {
+        self.offset_of(self.string_ids, item)
     }
 
     #[inline(always)]
@@ -237,6 +254,12 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
         Ok(String::from_utf8_unchecked(data.to_vec()))
     }
 
+    #[inline]
+    pub unsafe fn fast_get_utf8_str_at(&self, idx: u32) -> Result<String> {
+        let string_id = self.get_string_id(idx)?;
+        self.fast_get_utf8_str(string_id)
+    }
+
     #[inline(always)]
     pub fn get_utf16_str_lossy(&self, string_id: &StringId) -> Result<String> {
         let (_, data) = self.get_string_data(string_id)?;
@@ -268,6 +291,11 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
     }
 
     #[inline(always)]
+    pub fn type_id_idx(&self, item: &'a TypeId) -> Result<u32> {
+        self.offset_of(self.type_ids, item)
+    }
+
+    #[inline(always)]
     pub fn num_type_ids(&self) -> u32 {
         self.header.type_ids_size
     }
@@ -278,28 +306,22 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
     }
 
     #[inline(always)]
-    pub fn get_type_desc(&self, type_id: &TypeId) -> Result<String> {
-        self.get_utf16_str_lossy_at(type_id.descriptor_idx)
-    }
-
-    #[inline(always)]
-    pub fn get_type_desc_at(&self, idx: TypeIndex) -> Result<String> {
-        self.get_type_desc(self.get_type_id(idx)?)
-    }
-
     pub fn get_type_desc_utf16_lossy_at(&self, idx: TypeIndex) -> Result<String> {
         let type_id = self.get_type_id(idx)?;
         self.get_utf16_str_lossy_at(type_id.descriptor_idx)
     }
 
+    #[inline(always)]
     pub fn get_type_desc_utf16_lossy(&self, type_id: &TypeId) -> Result<String> {
         self.get_utf16_str_lossy_at(type_id.descriptor_idx)
     }
 
+    #[inline(always)]
     pub fn get_type_desc_utf16(&self, type_id: &TypeId) -> Result<String> {
         self.get_utf16_str_at(type_id.descriptor_idx)
     }
 
+    #[inline(always)]
     pub fn get_type_desc_utf16_at(&self, idx: TypeIndex) -> Result<String> {
         let type_id = self.get_type_id(idx)?;
         self.get_utf16_str_at(type_id.descriptor_idx)
@@ -334,6 +356,11 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
     pub fn get_field_id(&self, idx: u32) -> Result<&'a FieldId> {
         check_lt_result!(idx, self.field_ids.len(), FieldId);
         Ok(&self.field_ids[idx as usize])
+    }
+
+    #[inline(always)]
+    pub fn field_id_idx(&self, item: &'a FieldId) -> Result<u32> {
+        self.offset_of(self.field_ids, item)
     }
 
     #[inline(always)]
@@ -401,6 +428,11 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
     }
 
     #[inline(always)]
+    pub fn method_id_idx(&self, item: &'a MethodId) -> Result<u32> {
+        self.offset_of(self.method_ids, item)
+    }
+
+    #[inline(always)]
     pub fn num_method_ids(&self) -> u32 {
         self.header.method_ids_size
     }
@@ -464,6 +496,7 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
             + ca.insns_size_in_code_units() as usize;
         // must be 4-byte aligned
         let offset = (offset + 3) & !3;
+        check_lt_result!(offset, self.file_size(), TryItem);
         self.get_try_items_raw(offset as u32, ca.tries_size() as u16)
     }
 
@@ -542,7 +575,23 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
         self.get_type_list(class_def.interfaces_off)
     }
 
-    // type list related methods
+    #[inline]
+    fn offset_of<T: Sized, U>(&self, buf: &[U], o: &T) -> Result<u32> {
+        let start = buf.as_ptr() as usize;
+        let target = o as *const _ as usize;
+        let end = buf.as_ptr() as usize + self.file_size();
+
+        if target < start || target > end {
+            return dex_err!(UnknownObjectRef {
+                offset: target,
+                start,
+                end
+            });
+        }
+
+        Ok(((target - start) / std::mem::size_of::<T>()) as u32)
+    }
+
     #[inline(always)]
     pub fn get_type_list(&self, offset: u32) -> Result<Option<TypeList<'a>>> {
         if offset == 0 {

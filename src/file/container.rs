@@ -1,7 +1,7 @@
-use std::ops::{Deref, DerefMut};
 use memmap2::{MmapAsRawDesc, MmapMut};
+use std::ops::{Deref, DerefMut};
 
-use crate::Result;
+use crate::{file::MmapMutDexFile, Result};
 
 use super::MmapDexFile;
 
@@ -84,7 +84,7 @@ impl DexFileContainer {
     }
 
     pub fn open<'a>(&'a self) -> Result<MmapDexFile<'a>> {
-        MmapDexFile::open(self)
+        MmapDexFile::open_file(self)
     }
 
     pub fn get_location(&self) -> &str {

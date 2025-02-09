@@ -1,4 +1,6 @@
 
+// TODO: these functions are highly unsafe and does not stand any chance against fuzzing
+
 pub fn mutf8_to_str(utf8_data_in: &[u8]) -> crate::Result<String> {
     let utf16_data = mutf8_to_utf16(utf8_data_in);
     Ok(String::from_utf16(&utf16_data)?)
@@ -21,7 +23,7 @@ pub fn str_to_mutf8_lossy(str_data_in: &str) -> Vec<u8> {
 }
 
 #[inline]
-pub fn utf16_from_utf8(utf8_data_in: &[u8], offset: &mut usize) -> u32 {
+fn utf16_from_utf8(utf8_data_in: &[u8], offset: &mut usize) -> u32 {
     let one = utf8_data_in[*offset];
     *offset += 1;
     if one & 0x80 == 0 {
@@ -54,37 +56,37 @@ pub fn utf16_from_utf8(utf8_data_in: &[u8], offset: &mut usize) -> u32 {
 }
 
 #[inline(always)]
-pub fn trailing_utf16_char(maybe_pair: u32) -> u16 {
+fn trailing_utf16_char(maybe_pair: u32) -> u16 {
     (maybe_pair >> 16) as u16
 }
 
 #[inline(always)]
-pub fn leading_utf16_char(maybe_pair: u32) -> u16 {
+fn leading_utf16_char(maybe_pair: u32) -> u16 {
     (maybe_pair & 0x0000FFFFF) as u16
 }
 
 #[inline(always)]
-pub fn is_lead(ch: u16) -> bool {
+fn is_lead(ch: u16) -> bool {
     ch & 0xFC00 == 0xd800
 }
 
 #[inline(always)]
-pub fn is_trail(ch: u16) -> bool {
+fn is_trail(ch: u16) -> bool {
     ch & 0xFC00 == 0xDC00
 }
 
 #[inline(always)]
-pub fn is_surrogate(ch: u16) -> bool {
+fn is_surrogate(ch: u16) -> bool {
     ch & 0xF800 == 0xD800
 }
 
 #[inline(always)]
-pub fn is_surrogate_lead(ch: u16) -> bool {
+fn is_surrogate_lead(ch: u16) -> bool {
     ch & 0x0400 == 0x00
 }
 
 #[inline(always)]
-pub fn get_supplementary(lead: u16, trail: u16) -> u32 {
+fn get_supplementary(lead: u16, trail: u16) -> u32 {
     const OFFSET: u32 = (0xd800 << 10) + 0xdc00 - 0x10000;
     ((lead as u32) << 10) + (trail as u32) - OFFSET
 }
@@ -119,13 +121,17 @@ pub fn mutf8_len(utf8_data_in: &[u8], utf8_in_len: usize) -> usize {
     len
 }
 
-pub fn mutf8_to_utf16(utf8_data_in: &[u8]) -> Vec<u16> {
+fn mutf8_to_utf16(utf8_data_in: &[u8]) -> Vec<u16> {
+    if utf8_data_in.is_empty() {
+        return Vec::new();
+    }
+
     let utf8_in_len = utf8_data_in.len() - 1;
     let out_chars = mutf8_len(utf8_data_in, utf8_in_len);
     convert_mutf8_to_utf16(utf8_data_in, utf8_in_len, out_chars)
 }
 
-pub fn convert_mutf8_to_utf16(
+fn convert_mutf8_to_utf16(
     utf8_data_in: &[u8],
     utf8_in_len: usize,
     out_chars: usize,
@@ -150,7 +156,7 @@ pub fn convert_mutf8_to_utf16(
     utf16_data_out
 }
 
-pub fn utf16_to_mutf8(utf16_in: &[u16], options: &Options) -> Vec<u8> {
+fn utf16_to_mutf8(utf16_in: &[u16], options: &Options) -> Vec<u8> {
     let mut mutf8_len = 0;
     convert_utf16_to_mutf8(utf16_in, options, |_| mutf8_len += 1);
 

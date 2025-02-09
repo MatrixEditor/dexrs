@@ -4,7 +4,9 @@ use crate::{
     Result,
 };
 
-use super::{vreg, Code, DexContainer, DexFile, Format, Instruction, MethodId, StringId, TypeId};
+use super::{
+    vreg, Code, DexContainer, DexFile, FieldId, Format, Instruction, MethodId, StringId, TypeId,
+};
 
 pub mod prettify {
 
@@ -22,15 +24,26 @@ pub mod prettify {
 }
 
 impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
-    pub fn pretty_field(&self, field_idx: u32, opts: prettify::Field) -> String {
-        match self.pretty_field_opt(field_idx, opts) {
+    pub fn pretty_field_at(&self, field_idx: u32, opts: prettify::Field) -> String {
+        match self.pretty_field_opt_at(field_idx, opts) {
             Ok(s) => s,
             Err(_) => format!("<<invalid-field-idx-{field_idx}>>"),
         }
     }
 
-    pub fn pretty_field_opt(&self, field_idx: u32, opts: prettify::Field) -> Result<String> {
+    pub fn pretty_field(&self, field_id: &FieldId, opts: prettify::Field) -> String {
+        match self.pretty_field_opt(field_id, opts) {
+            Ok(s) => s,
+            Err(_) => format!("<<invalid-field-idx-{field_id:?}>>"),
+        }
+    }
+
+    pub fn pretty_field_opt_at(&self, field_idx: u32, opts: prettify::Field) -> Result<String> {
         let field_id = self.get_field_id(field_idx)?;
+        self.pretty_field_opt(field_id, opts)
+    }
+
+    pub fn pretty_field_opt(&self, field_id: &FieldId, opts: prettify::Field) -> Result<String> {
         let mut result = String::new();
         if opts == prettify::Field::WithType {
             result.push_str(&self.pretty_type_opt_at(field_id.type_idx)?);
@@ -56,7 +69,7 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
     }
 
     pub fn pretty_type_opt(&self, type_id: &TypeId) -> Result<String> {
-        Ok(pretty_desc(&self.get_type_desc(type_id)?))
+        Ok(pretty_desc(&self.get_type_desc_utf16_lossy(type_id)?))
     }
 
     pub fn pretty_utf16(&self, string_id: &StringId) -> String {
@@ -199,7 +212,7 @@ impl<'a> Instruction<'a> {
                         format!(
                             "{opcode} v{}, {} // field@{}",
                             vreg::A(self)?,
-                            dex.pretty_field(field_idx, prettify::Field::WithType),
+                            dex.pretty_field_at(field_idx, prettify::Field::WithType),
                             field_idx
                         )
                     }
@@ -238,7 +251,7 @@ impl<'a> Instruction<'a> {
                             "{opcode} v{}, v{}, {} // field@{}",
                             vreg::A(self)?,
                             vreg::B(self)?,
-                            dex.pretty_field(index, prettify::Field::WithType),
+                            dex.pretty_field_at(index, prettify::Field::WithType),
                             index
                         )
                     }

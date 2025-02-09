@@ -10,7 +10,7 @@ libfuzzer_sys::fuzz_target!(|data: &[u8]| {
     // this must not panic
     if let Ok(dex) = DexFile::from_raw_parts(&data, DexLocation::InMemory) {
         if DexFile::verify(&dex, VerifyPreset::All).is_ok() {
-            let _ = dex;
+            if let Ok(_) = dex.get_class_def(0) {}
         }
     }
 });
