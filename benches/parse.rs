@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use dexrs::file::{DexFile, DexLocation, Header, InMemoryDexContainer};
+use dexrs::file::{verifier::VerifyPreset, DexFile, DexLocation, Header, InMemoryDexContainer};
 
 fn parse_and_verify_small_file(c: &mut Criterion) {
     let data = include_bytes!("../tests/prime/prime.dex");
@@ -7,7 +7,7 @@ fn parse_and_verify_small_file(c: &mut Criterion) {
         b.iter(|| {
             let container = InMemoryDexContainer::new(data);
             if let Ok(dex) = DexFile::from_raw_parts(&container, DexLocation::InMemory) {
-                if DexFile::verify(&dex, true).is_ok() {
+                if DexFile::verify(&dex, VerifyPreset::All).is_ok() {
                     assert_eq!(
                         dex.expected_header_size(),
                         std::mem::size_of::<Header>() as u32

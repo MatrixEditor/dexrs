@@ -135,6 +135,34 @@ pub enum DexError {
         start: u16,
         end: u16,
     },
+
+    #[error("Encountered an encoded value with no size which is not allowed")]
+    EmptyEncodedValue,
+
+    #[error("Invalid encoded value({0:#x})")]
+    BadEncodedValueType(u8),
+
+    #[error("Invalid encoded value({value_type:#x}) requested byte at offset({offset}) which is out of bounds (size: {size})")]
+    InvalidEncodedValue {
+        value_type: u8,
+        offset: usize,
+        size: usize,
+    },
+
+    #[error("Invalid encoded value({value_type:#x}) requested size({size}) which is too big for data type (size: {max})")]
+    BadEncodedValueSize {
+        value_type: u8,
+        size: usize,
+        max: usize,
+    },
+
+    #[error("Invalid encoded value({value_type:#x}) requested array length({size}) which does not fit into value buffer (size: {max})")]
+    BadEncodedArrayLength {
+        value_type: u8,
+        size: usize,
+        offset: usize,
+        max: usize,
+    },
 }
 
 #[macro_export]

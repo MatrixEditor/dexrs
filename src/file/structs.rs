@@ -229,3 +229,46 @@ pub struct ParameterAnnotationsItem {
 unsafe impl plain::Plain for ParameterAnnotationsItem {}
 
 pub type AnnotationSetItem<'a> = &'a [u32];
+
+pub type EncodedArray = Vec<EncodedValue>;
+
+#[derive(Debug)]
+pub enum EncodedValue {
+    Byte(i8),
+    Short(i16),
+    Char(u16),
+    Int(i32),
+    Long(i64),
+    Float(f32),
+    Double(f64),
+    MethodType(u32),
+    MethodHandle(u32),
+    String(u32),
+    Type(u32),
+    Field(u32),
+    Method(u32),
+    Enum(u32),
+    Array(EncodedArray),
+    Annotation(EncodedAnnotation),
+    Null,
+    True,
+    False,
+}
+
+#[derive(Debug)]
+pub struct AnnotationElement {
+    pub name_idx: u32,
+    pub(crate) value: EncodedValue,
+}
+
+#[derive(Debug)]
+pub struct EncodedAnnotation {
+    pub type_idx: u32,
+    pub(crate) elements: Vec<AnnotationElement>,
+}
+
+#[derive(Debug)]
+pub struct AnnotationItem {
+    pub visibility: u8,
+    pub annotation: EncodedAnnotation,
+}

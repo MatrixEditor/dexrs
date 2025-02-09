@@ -231,6 +231,12 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
         }
     }
 
+    #[inline]
+    pub unsafe fn fast_get_utf8_str(&self, string_id: &StringId) -> Result<String> {
+        let (_, data) = self.get_string_data(string_id)?;
+        Ok(String::from_utf8_unchecked(data.to_vec()))
+    }
+
     #[inline(always)]
     pub fn get_utf16_str_lossy(&self, string_id: &StringId) -> Result<String> {
         let (_, data) = self.get_string_data(string_id)?;
@@ -369,6 +375,19 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
 
     pub fn get_shorty_lossy(&self, proto_id: &ProtoId) -> Result<String> {
         self.get_utf16_str_lossy_at(proto_id.shorty_idx)
+    }
+
+    //------------------------------------------------------------------------------
+    // EncodedValue
+    //------------------------------------------------------------------------------
+    pub fn get_encoded_value(&self, off: u32) -> Result<EncodedValue> {
+        check_lt_result!(off, self.file_size(), EncodedValue);
+        EncodedValue::new(&self.mmap[off as usize..])
+    }
+
+    pub fn get_annotation(&self, off: u32) -> Result<AnnotationItem> {
+        check_lt_result!(off, self.file_size(), Annotation);
+        AnnotationItem::from_raw_parts(&self.mmap[off as usize..])
     }
 
     // method ids related methods

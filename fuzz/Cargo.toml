@@ -34,3 +34,10 @@ path = "fuzz_targets/instructions.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "encoded_item"
+path = "fuzz_targets/encoded_item.rs"
+test = false
+doc = false
+bench = false
