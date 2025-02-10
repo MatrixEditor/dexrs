@@ -40,7 +40,7 @@ pub fn mutf8_strings() -> Result<()> {
     let name = utf::mutf8_to_str(data)?;
     //
     // 2. modified utf8 -> utf16 lossy
-    let name = utf::mutf8_to_str_lossy(data);
+    let name = utf::mutf8_to_str_lossy(data)?;
 
     // conversion back is also supported
     let mutf8_data = utf::str_to_mutf8(&name);

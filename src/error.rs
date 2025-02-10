@@ -172,6 +172,11 @@ pub enum DexError {
         start: usize,
         end: usize,
     },
+
+    #[error(
+        "Got invalid mUTF8 encoded string that encodes up to {idx} characters with only {len} bytes"
+    )]
+    MalformedMUTF8Sequence { idx: usize, len: usize },
 }
 
 #[macro_export]

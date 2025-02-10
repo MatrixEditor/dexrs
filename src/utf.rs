@@ -1,14 +1,16 @@
 
 // TODO: these functions are highly unsafe and does not stand any chance against fuzzing
 
+use crate::{dex_err, Result, error::DexError};
+
 pub fn mutf8_to_str(utf8_data_in: &[u8]) -> crate::Result<String> {
-    let utf16_data = mutf8_to_utf16(utf8_data_in);
+    let utf16_data = mutf8_to_utf16(utf8_data_in)?;
     Ok(String::from_utf16(&utf16_data)?)
 }
 
-pub fn mutf8_to_str_lossy(utf8_data_in: &[u8]) -> String {
-    let utf16_data = mutf8_to_utf16(utf8_data_in);
-    String::from_utf16_lossy(&utf16_data)
+pub fn mutf8_to_str_lossy(utf8_data_in: &[u8]) -> Result<String> {
+    let utf16_data = mutf8_to_utf16(utf8_data_in)?;
+    Ok(String::from_utf16_lossy(&utf16_data))
 }
 
 pub fn str_to_mutf8(str_data_in: &str) -> Vec<u8> {
@@ -91,7 +93,7 @@ fn get_supplementary(lead: u16, trail: u16) -> u32 {
     ((lead as u32) << 10) + (trail as u32) - OFFSET
 }
 
-pub fn mutf8_len(utf8_data_in: &[u8], utf8_in_len: usize) -> usize {
+pub fn mutf8_len(utf8_data_in: &[u8], utf8_in_len: usize) -> Result<usize> {
     let mut len = 0;
     let mut in_idx = 0;
     while in_idx < utf8_in_len {
@@ -118,17 +120,25 @@ pub fn mutf8_len(utf8_data_in: &[u8], utf8_in_len: usize) -> usize {
         in_idx += 1;
         len += 1;
     }
-    len
+
+    if in_idx > utf8_in_len {
+        // This case happens when there are any invalid character sequences
+        return dex_err!(MalformedMUTF8Sequence {
+            idx: in_idx,
+            len: utf8_in_len
+        })
+    }
+    Ok(len)
 }
 
-fn mutf8_to_utf16(utf8_data_in: &[u8]) -> Vec<u16> {
+fn mutf8_to_utf16(utf8_data_in: &[u8]) -> Result<Vec<u16>> {
     if utf8_data_in.is_empty() {
-        return Vec::new();
+        return Ok(Vec::new());
     }
 
     let utf8_in_len = utf8_data_in.len() - 1;
-    let out_chars = mutf8_len(utf8_data_in, utf8_in_len);
-    convert_mutf8_to_utf16(utf8_data_in, utf8_in_len, out_chars)
+    let out_chars = mutf8_len(utf8_data_in, utf8_in_len)?;
+    Ok(convert_mutf8_to_utf16(utf8_data_in, utf8_in_len, out_chars))
 }
 
 fn convert_mutf8_to_utf16(
@@ -251,6 +261,6 @@ mod tests {
     #[test]
     fn test_mutf8_to_str() {
         let data = &[102, 111, 111, 98, 97, 114, 0];
-        assert_eq!(mutf8_to_str_lossy(data), "foobar".to_string());
+        assert_eq!(mutf8_to_str_lossy(data).unwrap(), "foobar".to_string());
     }
 }

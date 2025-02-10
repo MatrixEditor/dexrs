@@ -217,7 +217,7 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
     }
 
     #[inline(always)]
-    pub fn string_ids(&self) -> &'a [StringId] {
+    pub fn get_string_ids(&self) -> &'a [StringId] {
         self.string_ids
     }
 
@@ -263,7 +263,7 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
     #[inline(always)]
     pub fn get_utf16_str_lossy(&self, string_id: &StringId) -> Result<String> {
         let (_, data) = self.get_string_data(string_id)?;
-        Ok(utf::mutf8_to_str_lossy(data))
+        utf::mutf8_to_str_lossy(data)
     }
 
     #[inline(always)]

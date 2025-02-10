@@ -1,7 +1,7 @@
 use memmap2::{MmapAsRawDesc, MmapMut};
 use std::ops::{Deref, DerefMut};
 
-use crate::{file::MmapMutDexFile, Result};
+use crate::Result;
 
 use super::MmapDexFile;
 
