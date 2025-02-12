@@ -9,7 +9,7 @@ pub fn decode_leb128<T: varint_simd::VarIntTarget>(data_in: &[u8]) -> Result<(T,
 }
 
 #[inline(always)]
-pub fn decode_leb128p1<T: varint_simd::VarIntTarget>(data_in: &[u8]) -> Result<(i32, usize)> {
+pub fn decode_leb128p1(data_in: &[u8]) -> Result<(i32, usize)> {
     let (result, size) = decode_leb128::<u32>(data_in)?;
     Ok(((result - 1) as i32, size))
 }

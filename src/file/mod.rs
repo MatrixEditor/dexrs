@@ -19,7 +19,8 @@ pub mod dump;
 pub use container::*;
 pub mod annotations;
 pub use annotations::*;
-use verifier::VerifyPreset;
+pub mod debug;
+pub use debug::*;
 
 use crate::{dex_err, error::DexError, leb128::decode_leb128, utf, Result};
 
@@ -33,6 +34,7 @@ pub const DEX_MAGIC_VERSIONS: &[&[u8]] = &[
 ];
 
 pub const DEX_ENDIAN_CONSTANT: u32 = 0x12345678;
+pub const DEX_NO_INDEX: u32 = 0xffffffff;
 
 #[derive(Debug)]
 pub enum DexLocation {
@@ -92,6 +94,34 @@ macro_rules! check_lt_result {
 // writer
 impl<'a, C: DexContainerMut<'a>> DexFile<'a, C> {
     //TODO
+}
+
+macro_rules! fn_id {
+    ($name:ident, $attr:ident, $ret_ty:ty, $idx_ty:ty, $(#[$meta:meta])* ) => {
+        $(#[$meta])*
+        #[inline(always)]
+        pub fn $name(&self, idx: $idx_ty) -> Result<&'a $ret_ty> {
+            check_lt_result!(idx, self.$attr.len(), $ret_ty);
+            Ok(&self.$attr[idx as usize])
+        }
+    };
+    ($name:ident, $attr:ident, Option: $ret_ty:ty, $fallback:ident, $idx_ty:ty, $(#[$meta:meta])*) => {
+        $(#[$meta])*
+        #[inline(always)]
+        pub fn $name(&'a self, idx: $idx_ty) -> Result<Option<&'a $ret_ty>> {
+            match idx {
+                DEX_NO_INDEX => Ok(None),
+                _=> Ok(Some(self.$fallback(idx)?)),
+            }
+        }
+    };
+    ($name:ident, $attr:ident, $ret_ty:ty[], $(#[$meta:meta])* ) => {
+        $(#[$meta])*
+        #[inline(always)]
+        pub fn $name(&'a self) -> &'a [$ret_ty] {
+            &self.$attr
+        }
+    }
 }
 
 impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
@@ -160,9 +190,9 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
             DexLocation::Path(loc.to_string()),
             if container.verify_checksum {
                 // currenlty supports only checksum
-                VerifyPreset::ChecksumOnly
+                verifier::VerifyPreset::ChecksumOnly
             } else {
-                VerifyPreset::None
+                verifier::VerifyPreset::None
             },
         )
     }
@@ -170,11 +200,11 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
     pub fn open(
         container: &'a C,
         location: DexLocation,
-        verify_preset: VerifyPreset,
+        verify_preset: verifier::VerifyPreset,
     ) -> Result<DexFile<'a, C>> {
         let dex = DexFile::from_raw_parts(container, location)?;
         dex.init()?;
-        if verify_preset != VerifyPreset::None {
+        if verify_preset != verifier::VerifyPreset::None {
             DexFile::verify(&dex, verify_preset)?;
         }
         Ok(dex)
@@ -202,23 +232,23 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
         self.mmap.len()
     }
 
+    #[inline(always)]
+    pub fn get_header(&self) -> &'a Header {
+        &self.header
+    }
+
     // ------------------------------------------------------------------------------
     // strings
     // ------------------------------------------------------------------------------
-    #[inline(always)]
-    pub fn get_string_id(&self, idx: u32) -> Result<&'a StringId> {
-        check_lt_result!(idx, self.string_ids.len(), StringId);
-        Ok(&self.string_ids[idx as usize])
-    }
+
+    // TODO: add docs
+    fn_id!(get_string_id, string_ids, StringId, u32,);
+    fn_id! {get_string_id_opt, string_ids, Option: StringId, get_string_id, u32,}
+    fn_id!(get_string_ids, string_ids, StringId[],);
 
     #[inline(always)]
     pub fn string_id_idx(&self, item: &'a StringId) -> Result<u32> {
         self.offset_of(self.string_ids, item)
-    }
-
-    #[inline(always)]
-    pub fn get_string_ids(&self) -> &'a [StringId] {
-        self.string_ids
     }
 
     #[inline(always)]

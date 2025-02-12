@@ -1,0 +1,21 @@
+[build-system]
+requires = ["maturin>=1.8,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "dexrs"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+]
+dynamic = ["version"]
+
+
+[tool.maturin]
+# allows us to use `cargo install --features python` directly
+features = ["pyo3/extension-module", "dexrs/python"]
+python-packages = ["dexrs"]
+python-source = "python"
+module-name = "dexrs._internal"

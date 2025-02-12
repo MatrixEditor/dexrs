@@ -8,8 +8,17 @@ adler32 = "1.2.0"
 memmap2 = "0.9.5"
 openssl = "0.10.64"
 plain = "0.2.3"
+pyo3 = { version = "0.23.4", optional = true, features = ["extension-module"] }
 thiserror = "2.0.11"
 varint-simd = "0.4.1"
+
+[features]
+default = []
+python = ["pyo3"]
+
+[lib]
+name = "dexrs"
+crate-type = ["cdylib", "rlib"]
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
