@@ -1,5 +1,6 @@
 
 // TODO: these functions are highly unsafe and does not stand any chance against fuzzing
+// -> resolved for now with Result<> as return type and additional checks
 
 use crate::{dex_err, Result, error::DexError};
 
@@ -167,7 +168,7 @@ fn convert_mutf8_to_utf16(
 }
 
 fn utf16_to_mutf8(utf16_in: &[u16], options: &Options) -> Vec<u8> {
-    let mut mutf8_len = 0;
+    let mut mutf8_len = 0; // trailing null byte
     convert_utf16_to_mutf8(utf16_in, options, |_| mutf8_len += 1);
 
     let mut mutf8_out;

@@ -1,5 +1,6 @@
-import dexrs
 import pytest
+
+from dexrs.error import PyDexError
 
 from . import _util
 
@@ -26,5 +27,5 @@ def test_invalid_type_id_idx() -> None:
     assert dex.get_type_id_opt(index) is None
 
     # error otherwise
-    with pytest.raises(dexrs.PyDexError):
+    with pytest.raises(PyDexError):
         dex.get_type_id(index)

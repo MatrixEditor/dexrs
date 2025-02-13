@@ -1,4 +1,8 @@
-use pyo3::{create_exception, exceptions::{PyIOError, PyRuntimeError}, PyErr};
+use pyo3::{
+    create_exception,
+    exceptions::{PyIOError, PyRuntimeError},
+    PyErr,
+};
 
 use crate::error::DexError;
 
@@ -22,10 +26,9 @@ impl From<GenericError> for PyErr {
     }
 }
 
-#[pyo3::pymodule]
-pub(crate) mod error {
+#[pyo3::pymodule(name = "error")]
+pub(crate) mod py_error {
 
     #[pymodule_export]
     use super::PyDexError;
-
 }

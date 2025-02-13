@@ -154,7 +154,7 @@ impl PyFileDexContainer {
 }
 
 #[pyo3::pymodule(name = "container")]
-pub(crate) mod container_mod {
+pub(crate) mod py_container {
 
     #[pymodule_export]
     use super::{PyDexContainer, PyFileDexContainer, PyInMemoryDexContainer};

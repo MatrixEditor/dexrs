@@ -17,14 +17,17 @@ pub(crate) mod py;
 mod _internal {
 
     #[pymodule_export]
-    use crate::py::container::container_mod;
+    use crate::py::container::py_container;
 
     #[pymodule_export]
-    use crate::py::file::file_mod;
+    use crate::py::file::py_file;
 
     #[pymodule_export]
-    use crate::py::error::error;
+    use crate::py::error::py_error;
 
     #[pymodule_export]
-    use crate::py::structs::structs;
+    use crate::py::structs::py_structs;
+
+    #[pymodule_export]
+    use crate::py::mutf8::py_mutf8;
 }

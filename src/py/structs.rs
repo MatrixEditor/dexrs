@@ -148,8 +148,8 @@ py_struct_fields!(PyDexTypeItem, {
     (type_idx, TypeIndex),
 },);
 
-#[pyo3::pymodule]
-pub(crate) mod structs {
+#[pyo3::pymodule(name = "structs")]
+pub(crate) mod py_structs {
 
     #[pymodule_export]
     use super::{

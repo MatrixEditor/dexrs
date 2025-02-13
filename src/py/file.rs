@@ -208,7 +208,7 @@ impl PyDexFileImpl {
 
 // final module
 #[pyo3::pymodule(name = "file")]
-pub(crate) mod file_mod {
+pub(crate) mod py_file {
 
     #[pymodule_export]
     use super::{PyDexFileImpl, PyVerifyPreset};
