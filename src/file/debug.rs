@@ -55,6 +55,10 @@ impl<'a> CodeItemDebugInfoAccessor<'a> {
         Self { ptr }
     }
 
+    pub fn parameter_names(&self) -> Result<DebugInfoParameterNamesIterator<'a>> {
+        DebugInfoParameterNamesIterator::new(self.ptr, 0)
+    }
+
     pub fn visit_parameter_names<F>(&self, visitor: F) -> Result<()>
     where
         F: Fn(u32),
@@ -135,4 +139,43 @@ impl<'a> CodeItemDebugInfoAccessor<'a> {
 
     // TODO
     // pub fn decode_local_info<F>(&self, visitor: F)
+}
+
+pub struct DebugInfoParameterNamesIterator<'dex> {
+    ptr: &'dex [u8],
+    offset: usize,
+    idx: usize,
+    size: usize,
+}
+
+impl<'dex> DebugInfoParameterNamesIterator<'dex> {
+    pub fn new(ptr: &'dex [u8], offset: usize) -> Result<Self> {
+        let mut pos = offset;
+        // skipping line number
+        let line = decode_leb128_off::<u32>(&ptr, &mut pos)?;
+        let size = decode_leb128_off::<u32>(&ptr, &mut pos)? as usize;
+        Ok(Self {
+            ptr,
+            offset,
+            size,
+            idx: 0,
+        })
+    }
+}
+
+impl<'a> Iterator for DebugInfoParameterNamesIterator<'a> {
+    type Item = u32;
+
+    fn next(&mut self) -> Option<u32> {
+        if self.idx >= self.size {
+            return None;
+        }
+        self.idx += 1;
+        match decode_leb128p1_off(&self.ptr, &mut self.offset) {
+            Ok(v) => {
+                Some(v as u32)
+            }
+            Err(_) => None,
+        }
+    }
 }

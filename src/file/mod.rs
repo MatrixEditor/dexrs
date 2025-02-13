@@ -317,6 +317,14 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
         self.get_utf16_str(string_id)
     }
 
+    #[inline(always)]
+    pub fn get_utf16_str_opt_at(&self, idx: StringIndex) -> Result<Option<String>> {
+        match idx {
+            StringIndex::MAX => Ok(None),
+            _ => Ok(Some(self.get_utf16_str_at(idx)?)),
+        }
+    }
+
     // ------------------------------------------------------------------------------
     // types
     // ------------------------------------------------------------------------------
@@ -374,6 +382,29 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
     pub fn get_insns_raw(&self, code_off: u32, size_in_code_units: u32) -> Result<&'a [u16]> {
         check_lt_result!(code_off, self.file_size(), "code stream offset");
         self.non_null_array_data_ptr(code_off, size_in_code_units as usize)
+    }
+
+    // ------------------------------------------------------------------------------
+    // Debug Info
+    // ------------------------------------------------------------------------------
+    #[inline(always)]
+    pub fn get_debug_info_accessor(&'a self, offset: u32) -> Result<CodeItemDebugInfoAccessor<'a>> {
+        check_lt_result!(offset, self.file_size(), "debug info offset");
+        Ok(CodeItemDebugInfoAccessor::new(
+            &self.mmap[offset as usize..],
+        ))
+    }
+
+    #[inline(always)]
+    pub fn get_debug_info_accessor_opt(
+        &'a self,
+        offset: u32,
+    ) -> Result<Option<CodeItemDebugInfoAccessor<'a>>> {
+        match offset {
+            // WHY?: It seems that some applications incorrectly set the debug info offset to 0
+            0 | u32::MAX => Ok(None),
+            _ => Ok(Some(self.get_debug_info_accessor(offset)?)),
+        }
     }
 
     // ------------------------------------------------------------------------------

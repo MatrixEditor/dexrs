@@ -4,6 +4,7 @@ from dexrs._internal import (
     error as rust_error,
 )
 
+# REVISIT: create individual submodules
 DexFile = rust_file.DexFile
 FileDexContainer = rust_container.FileDexContainer
 InMemoryDexContainer = rust_container.InMemoryDexContainer

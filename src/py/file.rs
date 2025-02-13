@@ -2,13 +2,12 @@ use std::sync::Arc;
 
 use pyo3::{exceptions::PyValueError, Py, PyResult, Python};
 
-use crate::file::{verifier::VerifyPreset, DexFile, DexLocation, StringIndex};
+use crate::file::{verifier::VerifyPreset, DexFile, DexLocation, StringIndex, TypeIndex};
 
 use super::{
     container::{PyFileDexContainer, PyInMemoryDexContainer},
-    structs::{PyDexHeader, PyDexStringId},
+    structs::{PyDexHeader, PyDexStringId, PyDexTypeId},
 };
-
 
 #[allow(non_camel_case_types)]
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -168,6 +167,25 @@ impl PyDexFileImpl {
 
     pub fn num_string_ids<'py>(&self, py: Python<'py>) -> PyResult<u32> {
         Ok(dex_action_impl!(self, num_string_ids, py))
+    }
+
+    // ----------------------------------------------------------------------------
+    // Type Ids
+    // ----------------------------------------------------------------------------
+    pub fn get_type_id<'py>(&self, py: Python<'py>, index: TypeIndex) -> PyResult<PyDexTypeId> {
+        Ok(dex_action_impl!(self, get_type_id, index, py).into())
+    }
+
+    pub fn get_type_id_opt<'py>(
+        &self,
+        py: Python<'py>,
+        index: TypeIndex,
+    ) -> PyResult<Option<PyDexTypeId>> {
+        Ok(dex_action_impl!(self, get_type_id_opt, index, py).map(Into::into))
+    }
+
+    pub fn num_type_ids<'py>(&self, py: Python<'py>) -> PyResult<u32> {
+        Ok(dex_action_impl!(self, num_type_ids, py))
     }
 
     // ----------------------------------------------------------------------------
