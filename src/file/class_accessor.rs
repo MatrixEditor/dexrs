@@ -47,7 +47,7 @@ impl<'a> Method {
 impl<'a> ClassItemBase for Method {
     fn read(&mut self, data: &'_ [u8], pos: &mut usize) -> Result<()> {
         let target = self.index as usize;
-        let value = decode_leb128_off::<u32>(&data[*pos..], pos)?;
+        let value = decode_leb128_off::<u32>(&data, pos)?;
         if target + value as usize > u32::MAX as usize {
             return dex_err!(BadEncodedIndex {
                 index: self.index,
@@ -56,8 +56,8 @@ impl<'a> ClassItemBase for Method {
             });
         }
         self.index += value;
-        self.access_flags = decode_leb128_off::<u32>(&data[*pos..], pos)?;
-        self.code_offset = decode_leb128_off::<u32>(&data[*pos..], pos)?;
+        self.access_flags = decode_leb128_off::<u32>(&data, pos)?;
+        self.code_offset = decode_leb128_off::<u32>(&data, pos)?;
         Ok(())
     }
 
@@ -93,7 +93,7 @@ impl<'a> Field {
 impl<'a> ClassItemBase for Field {
     fn read(&mut self, data: &'_ [u8], pos: &mut usize) -> Result<()> {
         let target = self.index as usize;
-        let value = decode_leb128_off::<u32>(&data[*pos..], pos)?;
+        let value = decode_leb128_off::<u32>(&data, pos)?;
         if target + value as usize > u32::MAX as usize {
             return dex_err!(BadEncodedIndex {
                 index: self.index,
@@ -102,7 +102,7 @@ impl<'a> ClassItemBase for Field {
             });
         }
         self.index += value;
-        self.access_flags = decode_leb128_off::<u32>(&data[*pos..], pos)?;
+        self.access_flags = decode_leb128_off::<u32>(&data, pos)?;
         Ok(())
     }
 
@@ -175,12 +175,9 @@ impl<'a> ClassAccessor<'a> {
             static_fields_off: 0,
         };
         accessor.num_static_fields = decode_leb128_off(&class_data, &mut accessor.ptr_pos)?;
-        accessor.num_instance_fields =
-            decode_leb128_off(&class_data[accessor.ptr_pos..], &mut accessor.ptr_pos)?;
-        accessor.num_direct_methods =
-            decode_leb128_off(&class_data[accessor.ptr_pos..], &mut accessor.ptr_pos)?;
-        accessor.num_virtual_methods =
-            decode_leb128_off(&class_data[accessor.ptr_pos..], &mut accessor.ptr_pos)?;
+        accessor.num_instance_fields = decode_leb128_off(&class_data, &mut accessor.ptr_pos)?;
+        accessor.num_direct_methods = decode_leb128_off(&class_data, &mut accessor.ptr_pos)?;
+        accessor.num_virtual_methods = decode_leb128_off(&class_data, &mut accessor.ptr_pos)?;
         accessor.static_fields_off = accessor.ptr_pos as u32;
         Ok(accessor)
     }

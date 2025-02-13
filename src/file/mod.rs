@@ -105,12 +105,12 @@ macro_rules! fn_id {
             Ok(&self.$attr[idx as usize])
         }
     };
-    ($name:ident, $attr:ident, Option: $ret_ty:ty, $fallback:ident, $idx_ty:ty, $(#[$meta:meta])*) => {
+    ($name:ident, $attr:ident, Option: $ret_ty:ty, $fallback:ident, $idx_ty:ident, $(#[$meta:meta])*) => {
         $(#[$meta])*
         #[inline(always)]
         pub fn $name(&'a self, idx: $idx_ty) -> Result<Option<&'a $ret_ty>> {
             match idx {
-                DEX_NO_INDEX => Ok(None),
+                $idx_ty::MAX => Ok(None),
                 _=> Ok(Some(self.$fallback(idx)?)),
             }
         }
@@ -120,6 +120,13 @@ macro_rules! fn_id {
         #[inline(always)]
         pub fn $name(&'a self) -> &'a [$ret_ty] {
             &self.$attr
+        }
+    };
+    ($name:ident, $attr:ident, Idx: $ref_ty:ty, $(#[$meta:meta])* ) => {
+        $(#[$meta])*
+        #[inline(always)]
+        pub fn $name(&'a self, item: &'a $ref_ty) -> Result<u32> {
+            self.offset_of(self.$attr, item)
         }
     }
 }
@@ -243,13 +250,9 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
 
     // TODO: add docs
     fn_id!(get_string_id, string_ids, StringId, u32,);
-    fn_id! {get_string_id_opt, string_ids, Option: StringId, get_string_id, u32,}
     fn_id!(get_string_ids, string_ids, StringId[],);
-
-    #[inline(always)]
-    pub fn string_id_idx(&self, item: &'a StringId) -> Result<u32> {
-        self.offset_of(self.string_ids, item)
-    }
+    fn_id! {get_string_id_opt, string_ids, Option: StringId, get_string_id, u32,}
+    fn_id! {string_id_idx, string_ids, Idx: StringId, }
 
     #[inline(always)]
     pub fn num_string_ids(&self) -> u32 {
@@ -309,30 +312,22 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
     }
 
     #[inline(always)]
-    pub fn get_utf16_str_at(&self, idx: u32) -> Result<String> {
+    pub fn get_utf16_str_at(&self, idx: StringIndex) -> Result<String> {
         let string_id = self.get_string_id(idx)?;
         self.get_utf16_str(string_id)
     }
 
-    #[inline(always)]
-    pub fn get_type_id(&self, idx: TypeIndex) -> Result<&'a TypeId> {
-        check_lt_result!(idx as u32, self.num_type_ids(), TypeId);
-        Ok(&self.type_ids[idx as usize])
-    }
-
-    #[inline(always)]
-    pub fn type_id_idx(&self, item: &'a TypeId) -> Result<u32> {
-        self.offset_of(self.type_ids, item)
-    }
+    // ------------------------------------------------------------------------------
+    // types
+    // ------------------------------------------------------------------------------
+    fn_id!(get_type_id, type_ids, TypeId, TypeIndex,);
+    fn_id!(get_type_ids, type_ids, TypeId[],);
+    fn_id! {type_id_idx, type_ids, Idx: TypeId, }
+    fn_id! {get_type_id_opt, type_ids, Option: TypeId, get_type_id, TypeIndex,}
 
     #[inline(always)]
     pub fn num_type_ids(&self) -> u32 {
         self.header.type_ids_size
-    }
-
-    #[inline(always)]
-    pub fn get_type_ids(&self) -> &'a [TypeId] {
-        self.type_ids
     }
 
     #[inline(always)]
@@ -381,27 +376,33 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
         self.non_null_array_data_ptr(code_off, size_in_code_units as usize)
     }
 
-    // -- fields
-    #[inline]
-    pub fn get_field_id(&self, idx: u32) -> Result<&'a FieldId> {
-        check_lt_result!(idx, self.field_ids.len(), FieldId);
-        Ok(&self.field_ids[idx as usize])
+    // ------------------------------------------------------------------------------
+    // field ids
+    // ------------------------------------------------------------------------------
+    fn_id!(get_field_id, field_ids, FieldId, FieldIndex,);
+    fn_id!(get_field_ids, field_ids, FieldId[],);
+    fn_id! {field_id_idx, field_ids, Idx: FieldId, }
+    fn_id! {get_field_id_opt, field_ids, Option: FieldId, get_field_id, FieldIndex,}
+
+    #[inline(always)]
+    pub fn num_field_ids(&self) -> u32 {
+        self.header.field_ids_size
     }
 
     #[inline(always)]
-    pub fn field_id_idx(&self, item: &'a FieldId) -> Result<u32> {
-        self.offset_of(self.field_ids, item)
-    }
-
-    #[inline(always)]
-    pub fn get_field_ids(&self) -> &'a [FieldId] {
-        self.field_ids
-    }
-
     pub fn get_field_name(&self, field_id: &FieldId) -> Result<String> {
         self.get_utf16_str_lossy_at(field_id.name_idx)
     }
 
+    #[inline(always)]
+    pub fn get_field_name_at(&self, idx: FieldIndex) -> Result<String> {
+        let field_id = self.get_field_id(idx)?;
+        self.get_utf16_str_lossy_at(field_id.name_idx)
+    }
+
+    // ------------------------------------------------------------------------------
+    // field ids
+    // ------------------------------------------------------------------------------
     // Proto related methods
     pub fn get_proto_id(&self, idx: ProtoIndex) -> Result<&'a ProtoId> {
         check_lt_result!(idx, self.proto_ids.len(), ProtoId);

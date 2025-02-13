@@ -15,11 +15,28 @@ pub fn decode_leb128p1(data_in: &[u8]) -> Result<(i32, usize)> {
 }
 
 #[inline(always)]
-pub fn decode_leb128_off<T: varint_simd::VarIntTarget>(
+pub fn decode_leb128_adv<T: varint_simd::VarIntTarget>(
     data_in: &[u8],
     ptr_pos: &mut usize,
 ) -> Result<T> {
     let (value, size) = decode_leb128(data_in)?;
+    *ptr_pos += size;
+    Ok(value)
+}
+
+#[inline(always)]
+pub fn decode_leb128_off<T: varint_simd::VarIntTarget>(
+    data_in: &[u8],
+    ptr_pos: &mut usize,
+) -> Result<T> {
+    let (value, size) = decode_leb128(&data_in[*ptr_pos..])?;
+    *ptr_pos += size;
+    Ok(value)
+}
+
+#[inline(always)]
+pub fn decode_leb128p1_off(data_in: &[u8], ptr_pos: &mut usize) -> Result<i32> {
+    let (value, size) = decode_leb128p1(&data_in[*ptr_pos..])?;
     *ptr_pos += size;
     Ok(value)
 }

@@ -30,18 +30,17 @@ impl PyDexContainer {
 #[pyo3::pyclass(
     name = "InMemoryDexContainer",
     module = "dexrs._internal.container",
-    extends = PyDexContainer,
-    subclass
+    frozen
 )]
 pub struct PyInMemoryDexContainer {
-    data: Py<PyBytes>,
+    pub(crate) data: Py<PyBytes>,
     length: usize,
 }
 
 impl AsRef<[u8]> for PyInMemoryDexContainer {
     #[inline]
     fn as_ref(&self) -> &[u8] {
-        Python::with_gil(|py| self.data.as_bytes(py))
+        self.deref()
     }
 }
 
@@ -49,7 +48,9 @@ impl Deref for PyInMemoryDexContainer {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
-        self.as_ref()
+        Python::with_gil(|py| {
+            self.data.as_bytes(py)
+        })
     }
 }
 
@@ -67,24 +68,18 @@ impl PyInMemoryDexContainer {
 #[pyo3::pymethods]
 impl PyInMemoryDexContainer {
     #[new]
-    pub fn new<'py>(
-        py: Python<'py>,
-        data: Py<PyBytes>,
-    ) -> PyResult<(PyInMemoryDexContainer, PyDexContainer)> {
-        Ok((
-            PyInMemoryDexContainer::open(py, data),
-            PyDexContainer::new(),
-        ))
+    pub fn new<'py>(py: Python<'py>, data: Py<PyBytes>) -> PyResult<PyInMemoryDexContainer> {
+        Ok(PyInMemoryDexContainer::open(py, data))
     }
 
     // TODO: measure performance overhead if data is huge
-    pub fn data<'py>(&self, py: Python<'py>) -> PyResult<Py<PyBytes>> {
-        Ok(self.data.clone_ref(py))
+    pub fn data<'py>(py_self: PyRef<'_, Self>, py: Python<'py>) -> PyResult<Py<PyBytes>> {
+        Ok(py_self.data.clone_ref(py))
     }
 
     #[getter]
-    pub fn file_size(&self) -> PyResult<usize> {
-        Ok(self.length)
+    pub fn file_size(py_self: PyRef<'_, Self>) -> PyResult<usize> {
+        Ok(py_self.length)
     }
 
     pub fn __len__(py_self: PyRef<'_, Self>) -> usize {
@@ -95,11 +90,10 @@ impl PyInMemoryDexContainer {
 #[pyo3::pyclass(
     name = "FileDexContainer",
     module = "dexrs._internal.container",
-    extends = PyDexContainer,
-    subclass
+    frozen
 )]
 pub struct PyFileDexContainer {
-    path: String,
+    pub(crate) path: String,
     _fp: std::fs::File,
     data: Arc<memmap2::Mmap>,
 }
@@ -107,7 +101,7 @@ pub struct PyFileDexContainer {
 impl AsRef<[u8]> for PyFileDexContainer {
     #[inline]
     fn as_ref(&self) -> &[u8] {
-        self.data.as_ref()
+        &self.data.as_ref()
     }
 }
 
@@ -115,7 +109,7 @@ impl Deref for PyFileDexContainer {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
-        self.as_ref()
+        &self.data.deref()
     }
 }
 
@@ -136,11 +130,8 @@ impl PyFileDexContainer {
 #[pyo3::pymethods]
 impl PyFileDexContainer {
     #[new]
-    pub fn new(path: String) -> PyResult<(Self, PyDexContainer)> {
-        Ok((
-            PyFileDexContainer::open(path)?,
-            PyDexContainer::new(),
-        ))
+    pub fn new(path: String) -> PyResult<PyFileDexContainer> {
+        Ok(PyFileDexContainer::open(path)?)
     }
 
     pub fn data<'py>(&self, py: Python<'py>) -> PyResult<Py<PyBytes>> {

@@ -3,7 +3,7 @@ use plain::Plain;
 pub type StringIndex = u32;
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct StringId {
     pub string_data_off: u32,
 }
@@ -20,15 +20,17 @@ impl StringId {
 pub type TypeIndex = u16;
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TypeId {
     pub descriptor_idx: StringIndex,
 }
 
 unsafe impl plain::Plain for TypeId {}
 
+pub type FieldIndex = u32;
+
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FieldId {
     pub class_idx: TypeIndex,  // index into type_ids_ array for defining class
     pub type_idx: TypeIndex,   // index into type_ids_ array for field type
@@ -40,7 +42,7 @@ unsafe impl plain::Plain for FieldId {}
 pub type ProtoIndex = u16;
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ProtoId {
     pub shorty_idx: StringIndex, // index into string_ids array for shorty descriptor
     pub return_type_idx: TypeIndex, // index into type_ids array for return type
@@ -51,7 +53,7 @@ pub struct ProtoId {
 unsafe impl plain::Plain for ProtoId {}
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MethodId {
     pub class_idx: TypeIndex,  // index into type_ids_ array for defining class
     pub proto_idx: ProtoIndex, // index into proto_ids_ array for method signature
@@ -61,7 +63,7 @@ pub struct MethodId {
 unsafe impl plain::Plain for MethodId {}
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ClassDef {
     pub class_idx: TypeIndex, // index into type_ids_ array for this class
     pad1_: u16,               // padding = 0
@@ -78,7 +80,7 @@ pub struct ClassDef {
 unsafe impl plain::Plain for ClassDef {}
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TypeItem {
     pub type_idx: TypeIndex, // index into type_ids section
 }
