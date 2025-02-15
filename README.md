@@ -1,12 +1,17 @@
 # DEXrs
 
-**DEXrs** is an exploratory project in Rust aimed at developing a decompiler for Android executable files (DEX files).
+**DEXrs** is an exploratory project in Rust aimed at developing a decompiler for Android executable files (DEX files). It currently covers a low level DEX file parser and disassembler with a Python API.
 
 #### What this project already covers:
 
-- [x] A (*blazingly fast*) DEX file parser using lazy parsing
+- [x] A (*blazingly fast* 🔥) DEX file parser that utilizes
+    - [x] *zero-copy* wherever applicable
+    - [x] *lazy-parsing* all the time
+    - [x] respect fuzzing tests to make sure there's no panic
+- [x] Python extension using pyo3 for Pythonists
 - [x] A simple disassembler for Dalvik byte code
-- [x] A simplistic Smali decompiler
+- [ ] Benchmarks are WIP, but present
+- [ ] A simplistic Smali disassembler
 
 #### Roadmap
 
@@ -22,36 +27,32 @@ Install DEXrs using Cargo:
 cargo install --git https://github.com/MatrixEditor/dexrs dexrs
 ```
 
+Or directly using pip:
+```bash
+pip install -ve dexrs@git+https://github.com/MatrixEditor/dexrs.git
+```
+
 ## Usage
 
 ### Disassembling DEX files
 
-Here’s a quick example of how to disassemble a DEX file:
+Here’s a quick example of how to parse a DEX file:
 
 ```rust
 let mut f = File::open("classes.dex").expect("file not found");
 // parse DEX input and verify its contents
-let mut dex = Dex::read(&mut f, true)?;
+let container = DexFileContainer::new(&file)
+    .verify(true)
+    .verify_checksum(true);
 
-let class = dex.get_class_def(0)?;
-if let Some(method) = class.get_direct_method(0) {
-    for insn in method.disasm(&mut dex)? {
-        println!("    {:#06x}: {:?}", insn.range.start, insn);
-    }
-}
+// please use the examples/ directory for more usage information
+let dex = container.open()?;
 ```
 
-## Decompilation to Smali
-
+In-memory parsing is also allowed:
 ```rust
-use dexrs::smali::SmaliWrite;
-
-let mut f = File::open("classes.dex").expect("file not found");
-let mut dex = Dex::read(&mut f, true)?;
-
-let class = dex.get_class_def(0)?;
-let mut stdout = std::io::stdout();
-stdout.write_class(&class, &mut dex)?;
+let data: [u8] = ...;
+let dex = DexFile::open(&data, DexLocation::InMemory, VerifyPreset::All)?;
 ```
 
 ## License

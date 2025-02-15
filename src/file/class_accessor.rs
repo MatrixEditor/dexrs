@@ -83,13 +83,6 @@ pub struct Field {
     pub is_static: bool,
 }
 
-impl<'a> Field {
-    #[inline(always)]
-    pub fn is_static(&self) -> bool {
-        self.is_static
-    }
-}
-
 impl<'a> ClassItemBase for Field {
     fn read(&mut self, data: &'_ [u8], pos: &mut usize) -> Result<()> {
         let target = self.index as usize;
@@ -121,9 +114,9 @@ impl Default for Field {
     }
 }
 
-pub struct ClassAccessor<'a> {
+pub struct ClassAccessor<'dex> {
     ptr_pos: usize,
-    class_data: &'a [u8],
+    class_data: &'dex [u8],
 
     pub num_static_fields: u32,
     pub num_instance_fields: u32,
@@ -135,7 +128,7 @@ pub struct ClassAccessor<'a> {
 }
 
 impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
-    pub fn get_class_accessor(&self, class_def: &ClassDef) -> Result<Option<ClassAccessor<'_>>> {
+    pub fn get_class_accessor(&self, class_def: &ClassDef) -> Result<Option<ClassAccessor<'a>>> {
         match class_def.class_data_off {
             0 => Ok(None),
             off => {

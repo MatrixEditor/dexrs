@@ -64,6 +64,13 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
         }
     }
 
+    pub fn pretty_type(&self, type_id: &TypeId) -> String {
+        match self.pretty_type_opt(type_id) {
+            Ok(s) => s,
+            Err(_) => format!("<<invalid-type-idx-{}>>", type_id.descriptor_idx),
+        }
+    }
+
     pub fn pretty_type_opt_at(&self, type_idx: TypeIndex) -> Result<String> {
         self.pretty_type_opt(self.get_type_id(type_idx)?)
     }

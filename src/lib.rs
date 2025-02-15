@@ -30,4 +30,7 @@ mod _internal {
 
     #[pymodule_export]
     use crate::py::mutf8::py_mutf8;
+
+    #[pymodule_export]
+    use crate::py::class_accessor::py_class_accessor;
 }

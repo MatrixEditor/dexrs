@@ -14,7 +14,7 @@ impl<'a> Instruction<'a> {
 
     #[inline]
     pub fn relative_at(&self, offset: usize) -> Result<Instruction<'a>> {
-        if offset + 2 >= self.0.len() {
+        if offset + 1 >= self.0.len() {
             return dex_err!(BadInstructionOffset {
                 opcode: self.name(),
                 offset: offset,

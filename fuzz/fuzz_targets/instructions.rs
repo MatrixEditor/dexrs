@@ -1,3 +1,6 @@
+// #81835918       REDUCE cov: 439 ft: 2487 corp: 407/57Kb lim: 4096 exec/s: 26796 rss: 631Mb L: 284/3689 MS: 4 ChangeByte-PersAutoDict-ChangeBit-EraseBytes- DE: "\322)\000\000"-
+// #81899060       REDUCE cov: 439 ft: 2487 corp: 407/57Kb lim: 4096 exec/s: 26799 rss: 631Mb L: 282/3689 MS: 1 EraseBytes-
+// #81909187       REDUCE cov: 439 ft: 2487 corp: 407/57Kb lim: 4096 exec/s: 26802 rss: 631Mb L: 784/3689 MS: 1 EraseBytes-
 #![no_main]
 #![allow(non_snake_case)]
 

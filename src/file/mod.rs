@@ -283,8 +283,8 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
 
     #[inline]
     pub unsafe fn fast_get_utf8_str(&self, string_id: &StringId) -> Result<String> {
-        let (_, data) = self.get_string_data(string_id)?;
-        Ok(String::from_utf8_unchecked(data.to_vec()))
+        let (size, data) = self.get_string_data(string_id)?;
+        Ok(String::from_utf8_unchecked(data[0..size as usize].to_vec()))
     }
 
     #[inline]
@@ -432,20 +432,15 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
     }
 
     // ------------------------------------------------------------------------------
-    // field ids
+    // proto ids
     // ------------------------------------------------------------------------------
-    // Proto related methods
-    pub fn get_proto_id(&self, idx: ProtoIndex) -> Result<&'a ProtoId> {
-        check_lt_result!(idx, self.proto_ids.len(), ProtoId);
-        Ok(&self.proto_ids[idx as usize])
-    }
+    fn_id!(get_proto_id, proto_ids, ProtoId, ProtoIndex,);
+    fn_id!(get_proto_ids, proto_ids, ProtoId[],);
+    fn_id! {proto_id_idx, proto_ids, Idx: ProtoId, }
+    fn_id! {get_proto_id_opt, proto_ids, Option: ProtoId, get_proto_id, ProtoIndex,}
 
     pub fn num_proto_ids(&self) -> u32 {
         self.header.proto_ids_size
-    }
-
-    pub fn get_proto_ids(&self) -> &'a [ProtoId] {
-        self.proto_ids
     }
 
     pub fn get_shorty_at(&self, idx: ProtoIndex) -> Result<String> {
@@ -479,36 +474,46 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
         AnnotationItem::from_raw_parts(&self.mmap[off as usize..])
     }
 
-    // method ids related methods
     //------------------------------------------------------------------------------
     // Method Ids
     //------------------------------------------------------------------------------
-    #[inline(always)]
-    pub fn get_method_id(&self, idx: u32) -> Result<&'a MethodId> {
-        check_lt_result!(idx, self.method_ids.len(), MethodId);
-        Ok(&self.method_ids[idx as usize])
-    }
-
-    #[inline(always)]
-    pub fn method_id_idx(&self, item: &'a MethodId) -> Result<u32> {
-        self.offset_of(self.method_ids, item)
-    }
+    fn_id!(get_method_id, method_ids, MethodId, u32,);
+    fn_id!(get_method_ids, method_ids, MethodId[],);
+    fn_id! {method_id_idx, method_ids, Idx: MethodId, }
+    fn_id! {get_method_id_opt, method_ids, Option: MethodId, get_method_id, u32,}
 
     #[inline(always)]
     pub fn num_method_ids(&self) -> u32 {
         self.header.method_ids_size
     }
 
+    // classdef related methods
+    //------------------------------------------------------------------------------
+    // ClassDefs
+    //------------------------------------------------------------------------------
+    fn_id!(get_class_def, class_defs, ClassDef, u32,);
+    fn_id!(get_class_defs, class_defs, ClassDef[],);
+    fn_id! {class_def_idx, class_defs, Idx: ClassDef, }
+    fn_id! {get_class_def_opt, class_defs, Option: ClassDef, get_class_def, u32,}
+
     #[inline(always)]
-    pub fn get_method_ids(&self) -> &'a [MethodId] {
-        self.method_ids
+    pub fn num_class_defs(&self) -> u32 {
+        self.header.class_defs_size
     }
 
-    // classdef related methods
-    #[inline(always)]
-    pub fn get_class_def(&self, idx: u32) -> Result<&'a ClassDef> {
-        check_lt_result!(idx, self.class_defs.len(), ClassDef);
-        Ok(&self.class_defs[idx as usize])
+    #[inline]
+    pub fn get_class_desc_utf16_lossy(&self, class_def: &ClassDef) -> Result<String> {
+        self.get_type_desc_utf16_lossy_at(class_def.class_idx)
+    }
+
+    #[inline]
+    pub fn get_class_desc_utf16(&self, class_def: &ClassDef) -> Result<String> {
+        self.get_type_desc_utf16_at(class_def.class_idx)
+    }
+
+    #[inline]
+    pub fn get_interfaces_list(&self, class_def: &ClassDef) -> Result<Option<TypeList<'a>>> {
+        self.get_type_list(class_def.interfaces_off)
     }
 
     //------------------------------------------------------------------------------
@@ -607,34 +612,6 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
         anno_item: &ParameterAnnotationsItem,
     ) -> Result<AnnotationSetItem<'a>> {
         self.get_annotation_set(anno_item.annotations_off)
-    }
-
-    //------------------------------------------------------------------------------
-    // ClassDefs
-    //------------------------------------------------------------------------------
-    #[inline(always)]
-    pub fn num_class_defs(&self) -> u32 {
-        self.header.class_defs_size
-    }
-
-    #[inline(always)]
-    pub fn get_class_defs(&self) -> &'a [ClassDef] {
-        self.class_defs
-    }
-
-    #[inline]
-    pub fn get_class_desc_utf16_lossy(&self, class_def: &ClassDef) -> Result<String> {
-        self.get_type_desc_utf16_lossy_at(class_def.class_idx)
-    }
-
-    #[inline]
-    pub fn get_class_desc_utf16(&self, class_def: &ClassDef) -> Result<String> {
-        self.get_type_desc_utf16_at(class_def.class_idx)
-    }
-
-    #[inline]
-    pub fn get_interfaces_list(&self, class_def: &ClassDef) -> Result<Option<TypeList<'a>>> {
-        self.get_type_list(class_def.interfaces_off)
     }
 
     #[inline]

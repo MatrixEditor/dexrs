@@ -85,7 +85,10 @@ pub fn get_magic(&self) -> Vec<u8> {
 py_struct_wrapper!("StringId", PyDexStringId, StringId);
 py_struct_fields!(PyDexStringId, {
     (string_data_off, StringIndex),
-},);
+},
+pub fn __repr__(&self) -> String {
+    format!("StringId(string_data_off={})", self.0.string_data_off)
+});
 
 // --------------------------------------------------------------------
 // TypeId
@@ -147,6 +150,7 @@ py_struct_wrapper!("TypeItem", PyDexTypeItem, TypeItem);
 py_struct_fields!(PyDexTypeItem, {
     (type_idx, TypeIndex),
 },);
+
 
 #[pyo3::pymodule(name = "structs")]
 pub(crate) mod py_structs {

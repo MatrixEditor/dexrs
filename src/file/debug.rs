@@ -152,7 +152,7 @@ impl<'dex> DebugInfoParameterNamesIterator<'dex> {
     pub fn new(ptr: &'dex [u8], offset: usize) -> Result<Self> {
         let mut pos = offset;
         // skipping line number
-        let line = decode_leb128_off::<u32>(&ptr, &mut pos)?;
+        decode_leb128_off::<u32>(&ptr, &mut pos)?;
         let size = decode_leb128_off::<u32>(&ptr, &mut pos)? as usize;
         Ok(Self {
             ptr,

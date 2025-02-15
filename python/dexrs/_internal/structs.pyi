@@ -26,3 +26,38 @@ class Header:
     def signature(self) -> bytes: ...
     @property
     def magic(self) -> bytes: ...
+
+class StringId:
+    string_data_off: int
+
+class TypeId:
+    descriptor_idx: int
+
+class FieldId:
+    class_idx: int
+    type_idx: int
+    name_idx: int
+
+class ProtoId:
+    shorty_idx: int
+    return_type_idx: int
+    parameters_off: int
+
+class MethodId:
+    class_idx: int
+    proto_idx: int
+    name_idx: int
+
+class ClassDef:
+    class_idx: int
+    access_flags: int
+    superclass_idx: int
+    interfaces_off: int
+    source_file_idx: int
+    annotations_off: int
+    class_data_off: int
+    static_values_off: int
+
+
+class TypeItem:
+    type_idx: int
