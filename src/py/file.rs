@@ -3,17 +3,12 @@ use std::sync::Arc;
 use pyo3::{exceptions::PyValueError, Py, PyResult, Python};
 
 use crate::file::{
-    verifier::VerifyPreset, DexFile, DexLocation, FieldIndex, ProtoIndex, StringIndex, TypeIndex,
+    verifier::VerifyPreset, DexFile, DexLocation, FieldIndex, ProtoIndex, PyDexClassDef,
+    PyDexFieldId, PyDexHeader, PyDexMethodId, PyDexProtoId, PyDexStringId, PyDexTypeId,
+    PyDexTypeItem, PyFileDexContainer, PyInMemoryDexContainer, StringIndex, TypeIndex,
 };
 
-use super::{
-    class_accessor::PyClassAccessor,
-    container::{PyFileDexContainer, PyInMemoryDexContainer},
-    structs::{
-        PyDexClassDef, PyDexFieldId, PyDexHeader, PyDexMethodId, PyDexProtoId, PyDexStringId,
-        PyDexTypeId, PyDexTypeItem,
-    },
-};
+use crate::file::class_accessor::PyClassAccessor;
 
 #[allow(non_camel_case_types)]
 #[derive(Clone, Copy, PartialEq, Eq)]

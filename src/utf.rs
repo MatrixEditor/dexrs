@@ -1,8 +1,7 @@
-
 // TODO: these functions are highly unsafe and does not stand any chance against fuzzing
 // -> resolved for now with Result<> as return type and additional checks
 
-use crate::{dex_err, Result, error::DexError};
+use crate::{dex_err, error::DexError, Result};
 
 pub fn mutf8_to_str(utf8_data_in: &[u8]) -> crate::Result<String> {
     let utf16_data = mutf8_to_utf16(utf8_data_in)?;
@@ -24,6 +23,44 @@ pub fn str_to_mutf8_lossy(str_data_in: &str) -> Vec<u8> {
     let options = Options::new().replace_bad_surrogates(true);
     utf16_to_mutf8(&utf16_data_in, &options)
 }
+
+// python exports
+#[cfg(feature = "python")]
+#[pyo3::pymodule(name = "mutf8")]
+pub(crate) mod py_utf {
+
+    use crate::error::DexError;
+    use pyo3::PyResult;
+
+    #[pyo3::pyfunction]
+    pub fn mutf8_to_str(utf8_data_in: &[u8]) -> PyResult<String> {
+        if let Some(end) = utf8_data_in.iter().position(|&x| x == 0) {
+            Ok(super::mutf8_to_str(&utf8_data_in[0..=end])?)
+        } else {
+            Err(DexError::BadStringDataMissingNullByte(utf8_data_in.as_ptr() as usize).into())
+        }
+    }
+
+    #[pyo3::pyfunction]
+    pub fn mutf8_to_str_lossy(utf8_data_in: &[u8]) -> PyResult<String> {
+        if let Some(end) = utf8_data_in.iter().position(|&x| x == 0) {
+            Ok(super::mutf8_to_str_lossy(&utf8_data_in[0..=end])?)
+        } else {
+            Err(DexError::BadStringDataMissingNullByte(utf8_data_in.as_ptr() as usize).into())
+        }
+    }
+
+    #[pyo3::pyfunction]
+    pub fn str_to_mutf8(str_data_in: &str) -> Vec<u8> {
+        super::str_to_mutf8(str_data_in)
+    }
+
+    #[pyo3::pyfunction]
+    pub fn str_to_mutf8_lossy(str_data_in: &str) -> Vec<u8> {
+        super::str_to_mutf8_lossy(str_data_in)
+    }
+}
+// end python exports
 
 #[inline]
 fn utf16_from_utf8(utf8_data_in: &[u8], offset: &mut usize) -> u32 {
@@ -127,7 +164,7 @@ pub fn mutf8_len(utf8_data_in: &[u8], utf8_in_len: usize) -> Result<usize> {
         return dex_err!(MalformedMUTF8Sequence {
             idx: in_idx,
             len: utf8_in_len
-        })
+        });
     }
     Ok(len)
 }
@@ -142,11 +179,7 @@ fn mutf8_to_utf16(utf8_data_in: &[u8]) -> Result<Vec<u16>> {
     Ok(convert_mutf8_to_utf16(utf8_data_in, utf8_in_len, out_chars))
 }
 
-fn convert_mutf8_to_utf16(
-    utf8_data_in: &[u8],
-    utf8_in_len: usize,
-    out_chars: usize,
-) -> Vec<u16> {
+fn convert_mutf8_to_utf16(utf8_data_in: &[u8], utf8_in_len: usize, out_chars: usize) -> Vec<u16> {
     if utf8_data_in.len() == out_chars {
         // common case where all chars are ASCII
         return utf8_data_in.iter().map(|i| *i as u16).collect();
@@ -183,7 +216,6 @@ fn utf16_to_mutf8(utf16_in: &[u16], options: &Options) -> Vec<u8> {
     // append trailing null
     mutf8_out.push(0x00);
     mutf8_out
-
 }
 
 pub struct Options {

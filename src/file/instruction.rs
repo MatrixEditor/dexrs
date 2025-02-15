@@ -1,5 +1,14 @@
+#[cfg(feature = "python")]
+use std::sync::Arc;
+
+#[cfg(feature = "python")]
+use crate::py::rs_type_wrapper;
+
 use crate::{dex_err, error::DexError, Result};
 
+// ----------------------------------------------------------------------------
+// Instruction
+// ----------------------------------------------------------------------------
 pub struct Instruction<'a>(&'a [u16]);
 
 impl<'a> Instruction<'a> {
@@ -51,7 +60,7 @@ impl<'a> Instruction<'a> {
         Ok(self.fetch16(offset)? as u32 | ((self.fetch16(offset + 1)? as u32) << 16))
     }
 
-    const fn format_desc_of(opcode: Code) -> &'static InstructionDescriptor {
+    pub(crate) const fn format_desc_of(opcode: Code) -> &'static InstructionDescriptor {
         &Instruction::INSN_DESCRIPTORS[opcode as usize]
     }
 
@@ -103,118 +112,249 @@ impl<'a> Instruction<'a> {
     }
 }
 
-#[allow(non_camel_case_types)]
-#[repr(u8)]
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Format {
-    k10x, // op
-    k12x, // op vA, vB
-    k11n, // op vA, #+B
-    k11x, // op vAA
-    k10t, // op +AA
-    k20t, // op +AAAA
-    k22x, // op vAA, vBBBB
-    k21t, // op vAA, +BBBB
-    k21s, // op vAA, #+BBBB
-    k21h, // op vAA, #+BBBB00000[00000000]
-    k21c, // op vAA, thing@BBBB
-    k23x, // op vAA, vBB, vCC
-    k22b, // op vAA, vBB, #+CC
-    k22t, // op vA, vB, +CCCC
-    k22s, // op vA, vB, #+CCCC
-    k22c, // op vA, vB, thing@CCCC
-    k32x, // op vAAAA, vBBBB
-    k30t, // op +AAAAAAAA
-    k31t, // op vAA, +BBBBBBBB
-    k31i, // op vAA, #+BBBBBBBB
-    k31c, // op vAA, thing@BBBBBBBB
-    k35c, // op {vC, vD, vE, vF, vG}, thing@BBBB (B: count, A: vG)
-    k3rc, // op {vCCCC .. v(CCCC+AA-1)}, meth@BBBB
+// >>> begin python export
+#[cfg(feature = "python")]
+rs_type_wrapper!(
+    Instruction<'static>,
+    PyInstruction,
+    RsInstruction,
+    name: "Instruction",
+    module: "dexrs._internal.code"
+);
 
+#[cfg(feature = "python")]
+#[pyo3::pymethods]
+impl PyInstruction {
+    pub fn fetch16(&self, offset: u32) -> pyo3::PyResult<u16> {
+        Ok(self.inner.0.fetch16(offset as usize)?)
+    }
+
+    pub fn fetch32(&self, offset: u32) -> pyo3::PyResult<u32> {
+        Ok(self.inner.0.fetch32(offset as usize)?)
+    }
+
+    #[staticmethod]
+    pub fn opcode_of(inst_data: u16) -> PyDexCode {
+        let opcode = Instruction::opcode_of(inst_data);
+        Instruction::format_desc_of(opcode).py_opcode
+    }
+
+    #[staticmethod]
+    pub fn name_of(opcode: PyDexCode) -> &'static str {
+        Instruction::format_desc_of(opcode.into()).name
+    }
+}
+// <<< end python export
+
+// ----------------------------------------------------------------------------
+// Format IDs
+// ----------------------------------------------------------------------------
+macro_rules! define_formats {
+    ($($fmtids:tt|)*) => {
+        #[allow(non_camel_case_types)]
+        #[repr(u8)]
+        #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+        pub enum Format {
+            $($fmtids,)*
+        }
+
+        #[cfg(feature = "python")]
+        #[repr(u8)]
+        #[allow(non_camel_case_types)]
+        #[derive(Debug, PartialEq, Eq)]
+        #[pyo3::pyclass(name = "Format", module = "dexrs._internal.code", eq)]
+        pub enum PyDexFormat {
+            $($fmtids,)*
+        }
+
+        #[cfg(feature = "python")]
+        impl From<Format> for PyDexFormat {
+            fn from(f: Format) -> Self {
+                match f {
+                    $(Format::$fmtids => PyDexFormat::$fmtids,)*
+                }
+            }
+        }
+
+    };
+}
+
+define_formats!(
+    k10x| // op
+    k12x| // op vA, vB
+    k11n| // op vA, #+B
+    k11x| // op vAA
+    k10t| // op +AA
+    k20t| // op +AAAA
+    k22x| // op vAA, vBBBB
+    k21t| // op vAA, +BBBB
+    k21s| // op vAA, #+BBBB
+    k21h| // op vAA, #+BBBB00000[00000000]
+    k21c| // op vAA, thing@BBBB
+    k23x| // op vAA, vBB, vCC
+    k22b| // op vAA, vBB, #+CC
+    k22t| // op vA, vB, +CCCC
+    k22s| // op vA, vB, #+CCCC
+    k22c| // op vA, vB, thing@CCCC
+    k32x| // op vAAAA, vBBBB
+    k30t| // op +AAAAAAAA
+    k31t| // op vAA, +BBBBBBBB
+    k31i| // op vAA, #+BBBBBBBB
+    k31c| // op vAA, thing@BBBBBBBB
+    k35c| // op {vC, vD, vE, vF, vG}, thing@BBBB (B: count, A: vG)
+    k3rc| // op {vCCCC .. v(CCCC+AA-1)}, meth@BBBB
     // op {vC, vD, vE, vF, vG}, meth@BBBB, proto@HHHH (A: count)
     // format: AG op BBBB FEDC HHHH
-    k45cc,
-
+    k45cc|
     // op {VCCCC .. v(CCCC+AA-1)}, meth@BBBB, proto@HHHH (AA: count)
     // format: AA op BBBB CCCC HHHH
-    k4rcc, // op {VCCCC .. v(CCCC+AA-1)}, meth@BBBB, proto@HHHH (AA: count)
+    k4rcc| // op {VCCCC .. v(CCCC+AA-1)}, meth@BBBB, proto@HHHH (AA: count)
+    k51l|  // op vAA, #+BBBBBBBBBBBBBBBB
+    kInvalidFormat|
+);
 
-    k51l, // op vAA, #+BBBBBBBBBBBBBBBB
-    kInvalidFormat,
+// ----------------------------------------------------------------------------
+// Index Types
+// ----------------------------------------------------------------------------
+macro_rules! define_index_types {
+    ($($index_ty:tt|)*) => {
+        pub enum IndexType {
+            $($index_ty,)*
+        }
+
+        #[cfg(feature = "python")]
+        #[derive(Debug, PartialEq, Eq)]
+        #[pyo3::pyclass(name = "IndexType", module = "dexrs._internal.code", eq)]
+        pub enum PyDexIndexType {
+            $($index_ty,)*
+        }
+
+        #[cfg(feature = "python")]
+        impl From<IndexType> for PyDexIndexType {
+            fn from(f: IndexType) -> Self {
+                match f {
+                    $(IndexType::$index_ty => PyDexIndexType::$index_ty,)*
+                }
+            }
+        }
+    };
 }
 
-pub enum IndexType {
-    Unknown = 0,
-    None,              // has no index
-    TypeRef,           // type reference index
-    StringRef,         // string reference index
-    MethodRef,         // method reference index
-    FieldRef,          // field reference index
-    MethodAndProtoRef, // method and a proto reference index (for invoke-polymorphic)
-    CallSiteRef,       // call site reference index
-    MethodHandleRef,   // constant method handle reference index
-    ProtoRef,          // prototype reference index
+define_index_types!(
+    Unknown|            // unknown
+    NoIndex|            // has no index
+    TypeRef|            // type reference index
+    StringRef|          // string reference index
+    MethodRef|          // method reference index
+    FieldRef|           // field reference index
+    MethodAndProtoRef|  // method and a proto reference index (for invoke-polymorphic)
+    CallSiteRef|        // call site reference index
+    MethodHandleRef|    // constant method handle reference index
+    ProtoRef|           // prototype reference index
+);
+
+// ----------------------------------------------------------------------------
+// Flags
+// ----------------------------------------------------------------------------
+macro_rules! define_flags {
+    ($mod_name:ident, $py_mod_name:ident, $mod_name_str:literal, {$($name:ident:$target_type:ty=$value:tt;)*}) => {
+        #[rustfmt::skip]
+        #[allow(non_upper_case_globals)]
+        pub mod $mod_name {
+            $(
+                pub const $name: $target_type = $value;
+            )*
+        }
+
+        #[cfg(feature = "python")]
+        #[rustfmt::skip]
+        #[allow(non_upper_case_globals)]
+        #[pyo3::pymodule(name = $mod_name_str)]
+        pub mod $py_mod_name {
+            use pyo3::types::PyModuleMethods;
+            use super::$mod_name;
+
+            #[pymodule_init]
+            fn init(m: &pyo3::Bound<'_, pyo3::types::PyModule>) -> pyo3::PyResult<()> {
+                $(m.add(stringify!($name), $mod_name::$name)?;)*
+                Ok(())
+            }
+        }
+    };
 }
 
-#[rustfmt::skip]
-#[allow(non_upper_case_globals)]
-pub mod code_flags {
-    pub const Complex: u8 = 0xFF;
-    pub const Custom: u8  = 0xFE;
-}
+define_flags!(
+    code_flags,
+    py_code_flags,
+    "code_flags",
+    {
+        Complex: u8 = 0xFF;
+        Custom: u8 = 0xFE;
+    }
+);
 
-#[rustfmt::skip]
-#[allow(non_upper_case_globals)]
-pub mod signatures {
-    pub const PackedSwitchSignature: u16     = 0x0100;
-    pub const SparseSwitchSignature: u16     = 0x0200;
-    pub const ArrayDataSignature: u16        = 0x0300;
-}
-#[rustfmt::skip]
-#[allow(non_upper_case_globals)]
-pub mod flags {
-    pub const Branch: u8              = 0x01;  // conditional or unconditional branch
-    pub const Continue: u8            = 0x02;  // flow can continue to next statement
-    pub const Switch: u8              = 0x04;  // switch statement
-    pub const Throw: u8               = 0x08;  // could cause an exception to be thrown
-    pub const Return: u8              = 0x10;  // returns, no additional statements
-    pub const Invoke: u8              = 0x20;  // a flavor of invoke
-    pub const Unconditional: u8       = 0x40;  // unconditional branch
-    pub const Experimental: u8        = 0x80;  // is an experimental opcode
-}
+define_flags!(
+    signatures,
+    py_signatures,
+    "signatures",
+    {
+        PackedSwitchSignature: u16 = 0x0100;
+        SparseSwitchSignature: u16 = 0x0200;
+        ArrayDataSignature: u16 = 0x0300;
+    }
+);
+
+define_flags!(
+    flags,
+    py_flags,
+    "flags",
+    {
+        Branch: u8              = 0x01;  // conditional or unconditional branch
+        Continue: u8            = 0x02;  // flow can continue to next statement
+        Switch: u8              = 0x04;  // switch statement
+        Throw: u8               = 0x08;  // could cause an exception to be thrown
+        Return: u8              = 0x10;  // returns, no additional statements
+        Invoke: u8              = 0x20;  // a flavor of invoke
+        Unconditional: u8       = 0x40;  // unconditional branch
+        Experimental: u8        = 0x80;  // is an experimental opcode
+    }
+);
 
 // These flags may be used later to verify instructions
-#[rustfmt::skip]
-#[allow(non_upper_case_globals)]
-pub mod verify_flags {
-    pub const VerifyNothing: u32            = 0x0000000;
-    pub const VerifyRegA: u32               = 0x0000001;
-    pub const VerifyRegAWide: u32           = 0x0000002;
-    pub const VerifyRegB: u32               = 0x0000004;
-    pub const VerifyRegBField: u32          = 0x0000008;
-    pub const VerifyRegBMethod: u32         = 0x0000010;
-    pub const VerifyRegBNewInstance: u32    = 0x0000020;
-    pub const VerifyRegBString: u32         = 0x0000040;
-    pub const VerifyRegBType: u32           = 0x0000080;
-    pub const VerifyRegBWide: u32           = 0x0000100;
-    pub const VerifyRegC: u32               = 0x0000200;
-    pub const VerifyRegCField: u32          = 0x0000400;
-    pub const VerifyRegCNewArray: u32       = 0x0000800;
-    pub const VerifyRegCType: u32           = 0x0001000;
-    pub const VerifyRegCWide: u32           = 0x0002000;
-    pub const VerifyArrayData: u32          = 0x0004000;
-    pub const VerifyBranchTarget: u32       = 0x0008000;
-    pub const VerifySwitchTargets: u32      = 0x0010000;
-    pub const VerifyVarArg: u32             = 0x0020000;
-    pub const VerifyVarArgNonZero: u32      = 0x0040000;
-    pub const VerifyVarArgRange: u32        = 0x0080000;
-    pub const VerifyVarArgRangeNonZero: u32 = 0x0100000;
-    pub const VerifyError: u32              = 0x0200000;
-    pub const VerifyRegHPrototype: u32      = 0x0400000;
-    pub const VerifyRegBCallSite: u32       = 0x0800000;
-    pub const VerifyRegBMethodHandle: u32   = 0x1000000;
-    pub const VerifyRegBPrototype: u32      = 0x2000000;
-}
+define_flags!(
+    verify_flags,
+    py_verify_flags,
+    "verify_flags",
+    {
+        VerifyNothing: u32            = 0x0000000;
+        VerifyRegA: u32               = 0x0000001;
+        VerifyRegAWide: u32           = 0x0000002;
+        VerifyRegB: u32               = 0x0000004;
+        VerifyRegBField: u32          = 0x0000008;
+        VerifyRegBMethod: u32         = 0x0000010;
+        VerifyRegBNewInstance: u32    = 0x0000020;
+        VerifyRegBString: u32         = 0x0000040;
+        VerifyRegBType: u32           = 0x0000080;
+        VerifyRegBWide: u32           = 0x0000100;
+        VerifyRegC: u32               = 0x0000200;
+        VerifyRegCField: u32          = 0x0000400;
+        VerifyRegCNewArray: u32       = 0x0000800;
+        VerifyRegCType: u32           = 0x0001000;
+        VerifyRegCWide: u32           = 0x0002000;
+        VerifyArrayData: u32          = 0x0004000;
+        VerifyBranchTarget: u32       = 0x0008000;
+        VerifySwitchTargets: u32      = 0x0010000;
+        VerifyVarArg: u32             = 0x0020000;
+        VerifyVarArgNonZero: u32      = 0x0040000;
+        VerifyVarArgRange: u32        = 0x0080000;
+        VerifyVarArgRangeNonZero: u32 = 0x0100000;
+        VerifyError: u32              = 0x0200000;
+        VerifyRegHPrototype: u32      = 0x0400000;
+        VerifyRegBCallSite: u32       = 0x0800000;
+        VerifyRegBMethodHandle: u32   = 0x1000000;
+        VerifyRegBPrototype: u32      = 0x2000000;
+    }
+);
 
 impl<'a> Instruction<'a> {
     #[inline(always)]
@@ -603,6 +743,8 @@ pub struct InstructionDescriptor {
     pub size_in_code_units: u8,
     pub opcode: Code,
     pub verify_flags: u32,
+    #[cfg(feature = "python")]
+    pub py_opcode: PyDexCode,
 }
 
 macro_rules! insn_desc_table {
@@ -616,7 +758,9 @@ macro_rules! insn_desc_table {
                     flags: $flags,
                     size_in_code_units: Instruction::code_size_in_code_units_by_opcode(Code::$code, Format::$format),
                     opcode: Code::$code,
-                    verify_flags: $verify_flags
+                    verify_flags: $verify_flags,
+                    #[cfg(feature = "python")]
+                    py_opcode: PyDexCode::$code
                 },)*
             ];
         }
@@ -627,91 +771,113 @@ macro_rules! insn_desc_table {
         pub enum Code {
             $($code,)*
         }
+
+        // python type generation without the need of second definition
+        #[cfg(feature = "python")]
+        #[repr(u8)]
+        #[allow(non_camel_case_types)]
+        #[pyo3::pyclass(name = "Code", module = "dexrs._internal.code", eq)]
+        #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+        pub enum PyDexCode {
+            $($code = Code::$code as u8,)*
+        }
+
+        #[cfg(feature = "python")]
+        impl Into<Code> for PyDexCode {
+            #[inline]
+            fn into(self) -> Code {
+                Instruction::opcode_of(self as u8 as u16)
+            }
+        }
     };
 }
+
+// ----------------------------------------------------------------------------
+// Instruction Descriptors
+// ----------------------------------------------------------------------------
 insn_desc_table!(
- /* 0x00 */ {NOP,  "nop", k10x, None,  flags::Continue,  verify_flags::VerifyNothing},
- /* 0x01 */ {MOVE,  "move", k12x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0x02 */ {MOVE_FROM16,  "move/from16", k22x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0x03 */ {MOVE_16,  "move/16", k32x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0x04 */ {MOVE_WIDE,  "move-wide", k12x, None,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide},
- /* 0x05 */ {MOVE_WIDE_FROM16,  "move-wide/from16", k22x, None,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide},
- /* 0x06 */ {MOVE_WIDE_16,  "move-wide/16", k32x, None,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide},
- /* 0x07 */ {MOVE_OBJECT,  "move-object", k12x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0x08 */ {MOVE_OBJECT_FROM16,  "move-object/from16", k22x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0x09 */ {MOVE_OBJECT_16,  "move-object/16", k32x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0x0a */ {MOVE_RESULT,  "move-result", k11x, None,  flags::Continue,  verify_flags::VerifyRegA},
- /* 0x0b */ {MOVE_RESULT_WIDE,  "move-result-wide", k11x, None,  flags::Continue,  verify_flags::VerifyRegAWide},
- /* 0x0c */ {MOVE_RESULT_OBJECT,  "move-result-object", k11x, None,  flags::Continue,  verify_flags::VerifyRegA},
- /* 0x0d */ {MOVE_EXCEPTION,  "move-exception", k11x, None,  flags::Continue,  verify_flags::VerifyRegA},
- /* 0x0e */ {RETURN_VOID,  "return-void", k10x, None,  flags::Return,  verify_flags::VerifyNothing},
- /* 0x0f */ {RETURN,  "return", k11x, None,  flags::Return,  verify_flags::VerifyRegA},
- /* 0x10 */ {RETURN_WIDE,  "return-wide", k11x, None,  flags::Return,  verify_flags::VerifyRegAWide},
- /* 0x11 */ {RETURN_OBJECT,  "return-object", k11x, None,  flags::Return,  verify_flags::VerifyRegA},
- /* 0x12 */ {CONST_4,  "const/4", k11n, None,  flags::Continue,  verify_flags::VerifyRegA},
- /* 0x13 */ {CONST_16,  "const/16", k21s, None,  flags::Continue,  verify_flags::VerifyRegA},
- /* 0x14 */ {CONST,  "const", k31i, None,  flags::Continue,  verify_flags::VerifyRegA},
- /* 0x15 */ {CONST_HIGH16,  "const/high16", k21h, None,  flags::Continue,  verify_flags::VerifyRegA},
- /* 0x16 */ {CONST_WIDE_16,  "const-wide/16", k21s, None,  flags::Continue,  verify_flags::VerifyRegAWide},
- /* 0x17 */ {CONST_WIDE_32,  "const-wide/32", k31i, None,  flags::Continue,  verify_flags::VerifyRegAWide},
- /* 0x18 */ {CONST_WIDE,  "const-wide", k51l, None,  flags::Continue,  verify_flags::VerifyRegAWide},
- /* 0x19 */ {CONST_WIDE_HIGH16,  "const-wide/high16", k21h, None,  flags::Continue,  verify_flags::VerifyRegAWide},
+ /* 0x00 */ {NOP,  "nop", k10x, NoIndex,  flags::Continue,  verify_flags::VerifyNothing},
+ /* 0x01 */ {MOVE,  "move", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0x02 */ {MOVE_FROM16,  "move/from16", k22x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0x03 */ {MOVE_16,  "move/16", k32x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0x04 */ {MOVE_WIDE,  "move-wide", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide},
+ /* 0x05 */ {MOVE_WIDE_FROM16,  "move-wide/from16", k22x, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide},
+ /* 0x06 */ {MOVE_WIDE_16,  "move-wide/16", k32x, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide},
+ /* 0x07 */ {MOVE_OBJECT,  "move-object", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0x08 */ {MOVE_OBJECT_FROM16,  "move-object/from16", k22x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0x09 */ {MOVE_OBJECT_16,  "move-object/16", k32x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0x0a */ {MOVE_RESULT,  "move-result", k11x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA},
+ /* 0x0b */ {MOVE_RESULT_WIDE,  "move-result-wide", k11x, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide},
+ /* 0x0c */ {MOVE_RESULT_OBJECT,  "move-result-object", k11x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA},
+ /* 0x0d */ {MOVE_EXCEPTION,  "move-exception", k11x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA},
+ /* 0x0e */ {RETURN_VOID,  "return-void", k10x, NoIndex,  flags::Return,  verify_flags::VerifyNothing},
+ /* 0x0f */ {RETURN,  "return", k11x, NoIndex,  flags::Return,  verify_flags::VerifyRegA},
+ /* 0x10 */ {RETURN_WIDE,  "return-wide", k11x, NoIndex,  flags::Return,  verify_flags::VerifyRegAWide},
+ /* 0x11 */ {RETURN_OBJECT,  "return-object", k11x, NoIndex,  flags::Return,  verify_flags::VerifyRegA},
+ /* 0x12 */ {CONST_4,  "const/4", k11n, NoIndex,  flags::Continue,  verify_flags::VerifyRegA},
+ /* 0x13 */ {CONST_16,  "const/16", k21s, NoIndex,  flags::Continue,  verify_flags::VerifyRegA},
+ /* 0x14 */ {CONST,  "const", k31i, NoIndex,  flags::Continue,  verify_flags::VerifyRegA},
+ /* 0x15 */ {CONST_HIGH16,  "const/high16", k21h, NoIndex,  flags::Continue,  verify_flags::VerifyRegA},
+ /* 0x16 */ {CONST_WIDE_16,  "const-wide/16", k21s, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide},
+ /* 0x17 */ {CONST_WIDE_32,  "const-wide/32", k31i, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide},
+ /* 0x18 */ {CONST_WIDE,  "const-wide", k51l, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide},
+ /* 0x19 */ {CONST_WIDE_HIGH16,  "const-wide/high16", k21h, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide},
  /* 0x1a */ {CONST_STRING,  "const-string", k21c, StringRef,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegBString},
  /* 0x1b */ {CONST_STRING_JUMBO,  "const-string/jumbo", k31c, StringRef,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegBString},
  /* 0x1c */ {CONST_CLASS,  "const-class", k21c, TypeRef,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegBType},
- /* 0x1d */ {MONITOR_ENTER,  "monitor-enter", k11x, None,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA},
- /* 0x1e */ {MONITOR_EXIT,  "monitor-exit", k11x, None,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA},
+ /* 0x1d */ {MONITOR_ENTER,  "monitor-enter", k11x, NoIndex,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA},
+ /* 0x1e */ {MONITOR_EXIT,  "monitor-exit", k11x, NoIndex,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA},
  /* 0x1f */ {CHECK_CAST,  "check-cast", k21c, TypeRef,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegBType},
  /* 0x20 */ {INSTANCE_OF,  "instance-of", k22c, TypeRef,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegCType},
- /* 0x21 */ {ARRAY_LENGTH,  "array-length", k12x, None,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0x21 */ {ARRAY_LENGTH,  "array-length", k12x, NoIndex,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
  /* 0x22 */ {NEW_INSTANCE,  "new-instance", k21c, TypeRef,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegBNewInstance},
  /* 0x23 */ {NEW_ARRAY,  "new-array", k22c, TypeRef,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegCNewArray},
  /* 0x24 */ {FILLED_NEW_ARRAY,  "filled-new-array", k35c, TypeRef,  flags::Continue | flags::Throw,  verify_flags::VerifyRegBType | verify_flags::VerifyVarArg},
  /* 0x25 */ {FILLED_NEW_ARRAY_RANGE,  "filled-new-array/range", k3rc, TypeRef,  flags::Continue | flags::Throw,  verify_flags::VerifyRegBType | verify_flags::VerifyVarArgRange},
- /* 0x26 */ {FILL_ARRAY_DATA,  "fill-array-data", k31t, None,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyArrayData},
- /* 0x27 */ {THROW,  "throw", k11x, None,  flags::Throw,  verify_flags::VerifyRegA},
- /* 0x28 */ {GOTO,  "goto", k10t, None,  flags::Branch | flags::Unconditional,  verify_flags::VerifyBranchTarget},
- /* 0x29 */ {GOTO_16,  "goto/16", k20t, None,  flags::Branch | flags::Unconditional,  verify_flags::VerifyBranchTarget},
- /* 0x2a */ {GOTO_32,  "goto/32", k30t, None,  flags::Branch | flags::Unconditional,  verify_flags::VerifyBranchTarget},
- /* 0x2b */ {PACKED_SWITCH,  "packed-switch", k31t, None,  flags::Continue | flags::Switch,  verify_flags::VerifyRegA | verify_flags::VerifySwitchTargets},
- /* 0x2c */ {SPARSE_SWITCH,  "sparse-switch", k31t, None,  flags::Continue | flags::Switch,  verify_flags::VerifyRegA | verify_flags::VerifySwitchTargets},
- /* 0x2d */ {CMPL_FLOAT,  "cmpl-float", k23x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
- /* 0x2e */ {CMPG_FLOAT,  "cmpg-float", k23x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
- /* 0x2f */ {CMPL_DOUBLE,  "cmpl-double", k23x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegBWide | verify_flags::VerifyRegCWide},
- /* 0x30 */ {CMPG_DOUBLE,  "cmpg-double", k23x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegBWide | verify_flags::VerifyRegCWide},
- /* 0x31 */ {CMP_LONG,  "cmp-long", k23x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegBWide | verify_flags::VerifyRegCWide},
- /* 0x32 */ {IF_EQ,  "if-eq", k22t, None,  flags::Continue | flags::Branch,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyBranchTarget},
- /* 0x33 */ {IF_NE,  "if-ne", k22t, None,  flags::Continue | flags::Branch,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyBranchTarget},
- /* 0x34 */ {IF_LT,  "if-lt", k22t, None,  flags::Continue | flags::Branch,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyBranchTarget},
- /* 0x35 */ {IF_GE,  "if-ge", k22t, None,  flags::Continue | flags::Branch,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyBranchTarget},
- /* 0x36 */ {IF_GT,  "if-gt", k22t, None,  flags::Continue | flags::Branch,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyBranchTarget},
- /* 0x37 */ {IF_LE,  "if-le", k22t, None,  flags::Continue | flags::Branch,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyBranchTarget},
- /* 0x38 */ {IF_EQZ,  "if-eqz", k21t, None,  flags::Continue | flags::Branch,  verify_flags::VerifyRegA | verify_flags::VerifyBranchTarget},
- /* 0x39 */ {IF_NEZ,  "if-nez", k21t, None,  flags::Continue | flags::Branch,  verify_flags::VerifyRegA | verify_flags::VerifyBranchTarget},
- /* 0x3a */ {IF_LTZ,  "if-ltz", k21t, None,  flags::Continue | flags::Branch,  verify_flags::VerifyRegA | verify_flags::VerifyBranchTarget},
- /* 0x3b */ {IF_GEZ,  "if-gez", k21t, None,  flags::Continue | flags::Branch,  verify_flags::VerifyRegA | verify_flags::VerifyBranchTarget},
- /* 0x3c */ {IF_GTZ,  "if-gtz", k21t, None,  flags::Continue | flags::Branch,  verify_flags::VerifyRegA | verify_flags::VerifyBranchTarget},
- /* 0x3d */ {IF_LEZ,  "if-lez", k21t, None,  flags::Continue | flags::Branch,  verify_flags::VerifyRegA | verify_flags::VerifyBranchTarget},
+ /* 0x26 */ {FILL_ARRAY_DATA,  "fill-array-data", k31t, NoIndex,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyArrayData},
+ /* 0x27 */ {THROW,  "throw", k11x, NoIndex,  flags::Throw,  verify_flags::VerifyRegA},
+ /* 0x28 */ {GOTO,  "goto", k10t, NoIndex,  flags::Branch | flags::Unconditional,  verify_flags::VerifyBranchTarget},
+ /* 0x29 */ {GOTO_16,  "goto/16", k20t, NoIndex,  flags::Branch | flags::Unconditional,  verify_flags::VerifyBranchTarget},
+ /* 0x2a */ {GOTO_32,  "goto/32", k30t, NoIndex,  flags::Branch | flags::Unconditional,  verify_flags::VerifyBranchTarget},
+ /* 0x2b */ {PACKED_SWITCH,  "packed-switch", k31t, NoIndex,  flags::Continue | flags::Switch,  verify_flags::VerifyRegA | verify_flags::VerifySwitchTargets},
+ /* 0x2c */ {SPARSE_SWITCH,  "sparse-switch", k31t, NoIndex,  flags::Continue | flags::Switch,  verify_flags::VerifyRegA | verify_flags::VerifySwitchTargets},
+ /* 0x2d */ {CMPL_FLOAT,  "cmpl-float", k23x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
+ /* 0x2e */ {CMPG_FLOAT,  "cmpg-float", k23x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
+ /* 0x2f */ {CMPL_DOUBLE,  "cmpl-double", k23x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegBWide | verify_flags::VerifyRegCWide},
+ /* 0x30 */ {CMPG_DOUBLE,  "cmpg-double", k23x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegBWide | verify_flags::VerifyRegCWide},
+ /* 0x31 */ {CMP_LONG,  "cmp-long", k23x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegBWide | verify_flags::VerifyRegCWide},
+ /* 0x32 */ {IF_EQ,  "if-eq", k22t, NoIndex,  flags::Continue | flags::Branch,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyBranchTarget},
+ /* 0x33 */ {IF_NE,  "if-ne", k22t, NoIndex,  flags::Continue | flags::Branch,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyBranchTarget},
+ /* 0x34 */ {IF_LT,  "if-lt", k22t, NoIndex,  flags::Continue | flags::Branch,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyBranchTarget},
+ /* 0x35 */ {IF_GE,  "if-ge", k22t, NoIndex,  flags::Continue | flags::Branch,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyBranchTarget},
+ /* 0x36 */ {IF_GT,  "if-gt", k22t, NoIndex,  flags::Continue | flags::Branch,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyBranchTarget},
+ /* 0x37 */ {IF_LE,  "if-le", k22t, NoIndex,  flags::Continue | flags::Branch,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyBranchTarget},
+ /* 0x38 */ {IF_EQZ,  "if-eqz", k21t, NoIndex,  flags::Continue | flags::Branch,  verify_flags::VerifyRegA | verify_flags::VerifyBranchTarget},
+ /* 0x39 */ {IF_NEZ,  "if-nez", k21t, NoIndex,  flags::Continue | flags::Branch,  verify_flags::VerifyRegA | verify_flags::VerifyBranchTarget},
+ /* 0x3a */ {IF_LTZ,  "if-ltz", k21t, NoIndex,  flags::Continue | flags::Branch,  verify_flags::VerifyRegA | verify_flags::VerifyBranchTarget},
+ /* 0x3b */ {IF_GEZ,  "if-gez", k21t, NoIndex,  flags::Continue | flags::Branch,  verify_flags::VerifyRegA | verify_flags::VerifyBranchTarget},
+ /* 0x3c */ {IF_GTZ,  "if-gtz", k21t, NoIndex,  flags::Continue | flags::Branch,  verify_flags::VerifyRegA | verify_flags::VerifyBranchTarget},
+ /* 0x3d */ {IF_LEZ,  "if-lez", k21t, NoIndex,  flags::Continue | flags::Branch,  verify_flags::VerifyRegA | verify_flags::VerifyBranchTarget},
  /* 0x3e */ {UNUSED_3E,  "unused-3e", k10x, Unknown,  0,  verify_flags::VerifyError},
  /* 0x3f */ {UNUSED_3F,  "unused-3f", k10x, Unknown,  0,  verify_flags::VerifyError},
  /* 0x40 */ {UNUSED_40,  "unused-40", k10x, Unknown,  0,  verify_flags::VerifyError},
  /* 0x41 */ {UNUSED_41,  "unused-41", k10x, Unknown,  0,  verify_flags::VerifyError},
  /* 0x42 */ {UNUSED_42,  "unused-42", k10x, Unknown,  0,  verify_flags::VerifyError},
  /* 0x43 */ {UNUSED_43,  "unused-43", k10x, Unknown,  0,  verify_flags::VerifyError},
- /* 0x44 */ {AGET,  "aget", k23x, None,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
- /* 0x45 */ {AGET_WIDE,  "aget-wide", k23x, None,  flags::Continue | flags::Throw,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
- /* 0x46 */ {AGET_OBJECT,  "aget-object", k23x, None,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
- /* 0x47 */ {AGET_BOOLEAN,  "aget-boolean", k23x, None,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
- /* 0x48 */ {AGET_BYTE,  "aget-byte", k23x, None,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
- /* 0x49 */ {AGET_CHAR,  "aget-char", k23x, None,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
- /* 0x4a */ {AGET_SHORT,  "aget-short", k23x, None,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
- /* 0x4b */ {APUT,  "aput", k23x, None,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
- /* 0x4c */ {APUT_WIDE,  "aput-wide", k23x, None,  flags::Continue | flags::Throw,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
- /* 0x4d */ {APUT_OBJECT,  "aput-object", k23x, None,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
- /* 0x4e */ {APUT_BOOLEAN,  "aput-boolean", k23x, None,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
- /* 0x4f */ {APUT_BYTE,  "aput-byte", k23x, None,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
- /* 0x50 */ {APUT_CHAR,  "aput-char", k23x, None,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
- /* 0x51 */ {APUT_SHORT,  "aput-short", k23x, None,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
+ /* 0x44 */ {AGET,  "aget", k23x, NoIndex,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
+ /* 0x45 */ {AGET_WIDE,  "aget-wide", k23x, NoIndex,  flags::Continue | flags::Throw,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
+ /* 0x46 */ {AGET_OBJECT,  "aget-object", k23x, NoIndex,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
+ /* 0x47 */ {AGET_BOOLEAN,  "aget-boolean", k23x, NoIndex,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
+ /* 0x48 */ {AGET_BYTE,  "aget-byte", k23x, NoIndex,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
+ /* 0x49 */ {AGET_CHAR,  "aget-char", k23x, NoIndex,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
+ /* 0x4a */ {AGET_SHORT,  "aget-short", k23x, NoIndex,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
+ /* 0x4b */ {APUT,  "aput", k23x, NoIndex,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
+ /* 0x4c */ {APUT_WIDE,  "aput-wide", k23x, NoIndex,  flags::Continue | flags::Throw,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
+ /* 0x4d */ {APUT_OBJECT,  "aput-object", k23x, NoIndex,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
+ /* 0x4e */ {APUT_BOOLEAN,  "aput-boolean", k23x, NoIndex,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
+ /* 0x4f */ {APUT_BYTE,  "aput-byte", k23x, NoIndex,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
+ /* 0x50 */ {APUT_CHAR,  "aput-char", k23x, NoIndex,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
+ /* 0x51 */ {APUT_SHORT,  "aput-short", k23x, NoIndex,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
  /* 0x52 */ {IGET,  "iget", k22c, FieldRef,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegCField},
  /* 0x53 */ {IGET_WIDE,  "iget-wide", k22c, FieldRef,  flags::Continue | flags::Throw,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegB | verify_flags::VerifyRegCField},
  /* 0x54 */ {IGET_OBJECT,  "iget-object", k22c, FieldRef,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegCField},
@@ -753,110 +919,110 @@ insn_desc_table!(
  /* 0x78 */ {INVOKE_INTERFACE_RANGE,  "invoke-interface/range", k3rc, MethodRef,  flags::Continue | flags::Throw | flags::Invoke,  verify_flags::VerifyRegBMethod | verify_flags::VerifyVarArgRangeNonZero},
  /* 0x79 */ {UNUSED_79,  "unused-79", k10x, Unknown,  0,  verify_flags::VerifyError},
  /* 0x7a */ {UNUSED_7A,  "unused-7a", k10x, Unknown,  0,  verify_flags::VerifyError},
- /* 0x7b */ {NEG_INT,  "neg-int", k12x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0x7c */ {NOT_INT,  "not-int", k12x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0x7d */ {NEG_LONG,  "neg-long", k12x, None,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide},
- /* 0x7e */ {NOT_LONG,  "not-long", k12x, None,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide},
- /* 0x7f */ {NEG_FLOAT,  "neg-float", k12x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0x80 */ {NEG_DOUBLE,  "neg-double", k12x, None,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide},
- /* 0x81 */ {INT_TO_LONG,  "int-to-long", k12x, None,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegB},
- /* 0x82 */ {INT_TO_FLOAT,  "int-to-float", k12x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0x83 */ {INT_TO_DOUBLE,  "int-to-double", k12x, None,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegB},
- /* 0x84 */ {LONG_TO_INT,  "long-to-int", k12x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegBWide},
- /* 0x85 */ {LONG_TO_FLOAT,  "long-to-float", k12x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegBWide},
- /* 0x86 */ {LONG_TO_DOUBLE,  "long-to-double", k12x, None,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide},
- /* 0x87 */ {FLOAT_TO_INT,  "float-to-int", k12x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0x88 */ {FLOAT_TO_LONG,  "float-to-long", k12x, None,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegB},
- /* 0x89 */ {FLOAT_TO_DOUBLE,  "float-to-double", k12x, None,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegB},
- /* 0x8a */ {DOUBLE_TO_INT,  "double-to-int", k12x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegBWide},
- /* 0x8b */ {DOUBLE_TO_LONG,  "double-to-long", k12x, None,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide},
- /* 0x8c */ {DOUBLE_TO_FLOAT,  "double-to-float", k12x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegBWide},
- /* 0x8d */ {INT_TO_BYTE,  "int-to-byte", k12x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0x8e */ {INT_TO_CHAR,  "int-to-char", k12x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0x8f */ {INT_TO_SHORT,  "int-to-short", k12x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0x90 */ {ADD_INT,  "add-int", k23x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
- /* 0x91 */ {SUB_INT,  "sub-int", k23x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
- /* 0x92 */ {MUL_INT,  "mul-int", k23x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
- /* 0x93 */ {DIV_INT,  "div-int", k23x, None,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
- /* 0x94 */ {REM_INT,  "rem-int", k23x, None,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
- /* 0x95 */ {AND_INT,  "and-int", k23x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
- /* 0x96 */ {OR_INT,  "or-int", k23x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
- /* 0x97 */ {XOR_INT,  "xor-int", k23x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
- /* 0x98 */ {SHL_INT,  "shl-int", k23x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
- /* 0x99 */ {SHR_INT,  "shr-int", k23x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
- /* 0x9a */ {USHR_INT,  "ushr-int", k23x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
- /* 0x9b */ {ADD_LONG,  "add-long", k23x, None,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide | verify_flags::VerifyRegCWide},
- /* 0x9c */ {SUB_LONG,  "sub-long", k23x, None,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide | verify_flags::VerifyRegCWide},
- /* 0x9d */ {MUL_LONG,  "mul-long", k23x, None,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide | verify_flags::VerifyRegCWide},
- /* 0x9e */ {DIV_LONG,  "div-long", k23x, None,  flags::Continue | flags::Throw,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide | verify_flags::VerifyRegCWide},
- /* 0x9f */ {REM_LONG,  "rem-long", k23x, None,  flags::Continue | flags::Throw,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide | verify_flags::VerifyRegCWide},
- /* 0xa0 */ {AND_LONG,  "and-long", k23x, None,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide | verify_flags::VerifyRegCWide},
- /* 0xa1 */ {OR_LONG,  "or-long", k23x, None,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide | verify_flags::VerifyRegCWide},
- /* 0xa2 */ {XOR_LONG,  "xor-long", k23x, None,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide | verify_flags::VerifyRegCWide},
- /* 0xa3 */ {SHL_LONG,  "shl-long", k23x, None,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide | verify_flags::VerifyRegC},
- /* 0xa4 */ {SHR_LONG,  "shr-long", k23x, None,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide | verify_flags::VerifyRegC},
- /* 0xa5 */ {USHR_LONG,  "ushr-long", k23x, None,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide | verify_flags::VerifyRegC},
- /* 0xa6 */ {ADD_FLOAT,  "add-float", k23x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
- /* 0xa7 */ {SUB_FLOAT,  "sub-float", k23x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
- /* 0xa8 */ {MUL_FLOAT,  "mul-float", k23x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
- /* 0xa9 */ {DIV_FLOAT,  "div-float", k23x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
- /* 0xaa */ {REM_FLOAT,  "rem-float", k23x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
- /* 0xab */ {ADD_DOUBLE,  "add-double", k23x, None,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide | verify_flags::VerifyRegCWide},
- /* 0xac */ {SUB_DOUBLE,  "sub-double", k23x, None,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide | verify_flags::VerifyRegCWide},
- /* 0xad */ {MUL_DOUBLE,  "mul-double", k23x, None,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide | verify_flags::VerifyRegCWide},
- /* 0xae */ {DIV_DOUBLE,  "div-double", k23x, None,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide | verify_flags::VerifyRegCWide},
- /* 0xaf */ {REM_DOUBLE,  "rem-double", k23x, None,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide | verify_flags::VerifyRegCWide},
- /* 0xb0 */ {ADD_INT_2ADDR,  "add-int/2addr", k12x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0xb1 */ {SUB_INT_2ADDR,  "sub-int/2addr", k12x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0xb2 */ {MUL_INT_2ADDR,  "mul-int/2addr", k12x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0xb3 */ {DIV_INT_2ADDR,  "div-int/2addr", k12x, None,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0xb4 */ {REM_INT_2ADDR,  "rem-int/2addr", k12x, None,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0xb5 */ {AND_INT_2ADDR,  "and-int/2addr", k12x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0xb6 */ {OR_INT_2ADDR,  "or-int/2addr", k12x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0xb7 */ {XOR_INT_2ADDR,  "xor-int/2addr", k12x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0xb8 */ {SHL_INT_2ADDR,  "shl-int/2addr", k12x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0xb9 */ {SHR_INT_2ADDR,  "shr-int/2addr", k12x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0xba */ {USHR_INT_2ADDR,  "ushr-int/2addr", k12x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0xbb */ {ADD_LONG_2ADDR,  "add-long/2addr", k12x, None,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide},
- /* 0xbc */ {SUB_LONG_2ADDR,  "sub-long/2addr", k12x, None,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide},
- /* 0xbd */ {MUL_LONG_2ADDR,  "mul-long/2addr", k12x, None,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide},
- /* 0xbe */ {DIV_LONG_2ADDR,  "div-long/2addr", k12x, None,  flags::Continue | flags::Throw,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide},
- /* 0xbf */ {REM_LONG_2ADDR,  "rem-long/2addr", k12x, None,  flags::Continue | flags::Throw,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide},
- /* 0xc0 */ {AND_LONG_2ADDR,  "and-long/2addr", k12x, None,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide},
- /* 0xc1 */ {OR_LONG_2ADDR,  "or-long/2addr", k12x, None,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide},
- /* 0xc2 */ {XOR_LONG_2ADDR,  "xor-long/2addr", k12x, None,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide},
- /* 0xc3 */ {SHL_LONG_2ADDR,  "shl-long/2addr", k12x, None,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegB},
- /* 0xc4 */ {SHR_LONG_2ADDR,  "shr-long/2addr", k12x, None,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegB},
- /* 0xc5 */ {USHR_LONG_2ADDR,  "ushr-long/2addr", k12x, None,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegB},
- /* 0xc6 */ {ADD_FLOAT_2ADDR,  "add-float/2addr", k12x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0xc7 */ {SUB_FLOAT_2ADDR,  "sub-float/2addr", k12x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0xc8 */ {MUL_FLOAT_2ADDR,  "mul-float/2addr", k12x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0xc9 */ {DIV_FLOAT_2ADDR,  "div-float/2addr", k12x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0xca */ {REM_FLOAT_2ADDR,  "rem-float/2addr", k12x, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0xcb */ {ADD_DOUBLE_2ADDR,  "add-double/2addr", k12x, None,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide},
- /* 0xcc */ {SUB_DOUBLE_2ADDR,  "sub-double/2addr", k12x, None,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide},
- /* 0xcd */ {MUL_DOUBLE_2ADDR,  "mul-double/2addr", k12x, None,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide},
- /* 0xce */ {DIV_DOUBLE_2ADDR,  "div-double/2addr", k12x, None,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide},
- /* 0xcf */ {REM_DOUBLE_2ADDR,  "rem-double/2addr", k12x, None,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide},
- /* 0xd0 */ {ADD_INT_LIT16,  "add-int/lit16", k22s, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0xd1 */ {RSUB_INT,  "rsub-int", k22s, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0xd2 */ {MUL_INT_LIT16,  "mul-int/lit16", k22s, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0xd3 */ {DIV_INT_LIT16,  "div-int/lit16", k22s, None,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0xd4 */ {REM_INT_LIT16,  "rem-int/lit16", k22s, None,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0xd5 */ {AND_INT_LIT16,  "and-int/lit16", k22s, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0xd6 */ {OR_INT_LIT16,  "or-int/lit16", k22s, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0xd7 */ {XOR_INT_LIT16,  "xor-int/lit16", k22s, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0xd8 */ {ADD_INT_LIT8,  "add-int/lit8", k22b, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0xd9 */ {RSUB_INT_LIT8,  "rsub-int/lit8", k22b, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0xda */ {MUL_INT_LIT8,  "mul-int/lit8", k22b, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0xdb */ {DIV_INT_LIT8,  "div-int/lit8", k22b, None,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0xdc */ {REM_INT_LIT8,  "rem-int/lit8", k22b, None,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0xdd */ {AND_INT_LIT8,  "and-int/lit8", k22b, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0xde */ {OR_INT_LIT8,  "or-int/lit8", k22b, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0xdf */ {XOR_INT_LIT8,  "xor-int/lit8", k22b, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0xe0 */ {SHL_INT_LIT8,  "shl-int/lit8", k22b, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0xe1 */ {SHR_INT_LIT8,  "shr-int/lit8", k22b, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
- /* 0xe2 */ {USHR_INT_LIT8,  "ushr-int/lit8", k22b, None,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0x7b */ {NEG_INT,  "neg-int", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0x7c */ {NOT_INT,  "not-int", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0x7d */ {NEG_LONG,  "neg-long", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide},
+ /* 0x7e */ {NOT_LONG,  "not-long", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide},
+ /* 0x7f */ {NEG_FLOAT,  "neg-float", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0x80 */ {NEG_DOUBLE,  "neg-double", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide},
+ /* 0x81 */ {INT_TO_LONG,  "int-to-long", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegB},
+ /* 0x82 */ {INT_TO_FLOAT,  "int-to-float", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0x83 */ {INT_TO_DOUBLE,  "int-to-double", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegB},
+ /* 0x84 */ {LONG_TO_INT,  "long-to-int", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegBWide},
+ /* 0x85 */ {LONG_TO_FLOAT,  "long-to-float", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegBWide},
+ /* 0x86 */ {LONG_TO_DOUBLE,  "long-to-double", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide},
+ /* 0x87 */ {FLOAT_TO_INT,  "float-to-int", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0x88 */ {FLOAT_TO_LONG,  "float-to-long", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegB},
+ /* 0x89 */ {FLOAT_TO_DOUBLE,  "float-to-double", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegB},
+ /* 0x8a */ {DOUBLE_TO_INT,  "double-to-int", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegBWide},
+ /* 0x8b */ {DOUBLE_TO_LONG,  "double-to-long", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide},
+ /* 0x8c */ {DOUBLE_TO_FLOAT,  "double-to-float", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegBWide},
+ /* 0x8d */ {INT_TO_BYTE,  "int-to-byte", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0x8e */ {INT_TO_CHAR,  "int-to-char", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0x8f */ {INT_TO_SHORT,  "int-to-short", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0x90 */ {ADD_INT,  "add-int", k23x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
+ /* 0x91 */ {SUB_INT,  "sub-int", k23x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
+ /* 0x92 */ {MUL_INT,  "mul-int", k23x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
+ /* 0x93 */ {DIV_INT,  "div-int", k23x, NoIndex,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
+ /* 0x94 */ {REM_INT,  "rem-int", k23x, NoIndex,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
+ /* 0x95 */ {AND_INT,  "and-int", k23x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
+ /* 0x96 */ {OR_INT,  "or-int", k23x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
+ /* 0x97 */ {XOR_INT,  "xor-int", k23x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
+ /* 0x98 */ {SHL_INT,  "shl-int", k23x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
+ /* 0x99 */ {SHR_INT,  "shr-int", k23x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
+ /* 0x9a */ {USHR_INT,  "ushr-int", k23x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
+ /* 0x9b */ {ADD_LONG,  "add-long", k23x, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide | verify_flags::VerifyRegCWide},
+ /* 0x9c */ {SUB_LONG,  "sub-long", k23x, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide | verify_flags::VerifyRegCWide},
+ /* 0x9d */ {MUL_LONG,  "mul-long", k23x, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide | verify_flags::VerifyRegCWide},
+ /* 0x9e */ {DIV_LONG,  "div-long", k23x, NoIndex,  flags::Continue | flags::Throw,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide | verify_flags::VerifyRegCWide},
+ /* 0x9f */ {REM_LONG,  "rem-long", k23x, NoIndex,  flags::Continue | flags::Throw,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide | verify_flags::VerifyRegCWide},
+ /* 0xa0 */ {AND_LONG,  "and-long", k23x, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide | verify_flags::VerifyRegCWide},
+ /* 0xa1 */ {OR_LONG,  "or-long", k23x, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide | verify_flags::VerifyRegCWide},
+ /* 0xa2 */ {XOR_LONG,  "xor-long", k23x, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide | verify_flags::VerifyRegCWide},
+ /* 0xa3 */ {SHL_LONG,  "shl-long", k23x, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide | verify_flags::VerifyRegC},
+ /* 0xa4 */ {SHR_LONG,  "shr-long", k23x, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide | verify_flags::VerifyRegC},
+ /* 0xa5 */ {USHR_LONG,  "ushr-long", k23x, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide | verify_flags::VerifyRegC},
+ /* 0xa6 */ {ADD_FLOAT,  "add-float", k23x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
+ /* 0xa7 */ {SUB_FLOAT,  "sub-float", k23x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
+ /* 0xa8 */ {MUL_FLOAT,  "mul-float", k23x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
+ /* 0xa9 */ {DIV_FLOAT,  "div-float", k23x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
+ /* 0xaa */ {REM_FLOAT,  "rem-float", k23x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB | verify_flags::VerifyRegC},
+ /* 0xab */ {ADD_DOUBLE,  "add-double", k23x, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide | verify_flags::VerifyRegCWide},
+ /* 0xac */ {SUB_DOUBLE,  "sub-double", k23x, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide | verify_flags::VerifyRegCWide},
+ /* 0xad */ {MUL_DOUBLE,  "mul-double", k23x, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide | verify_flags::VerifyRegCWide},
+ /* 0xae */ {DIV_DOUBLE,  "div-double", k23x, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide | verify_flags::VerifyRegCWide},
+ /* 0xaf */ {REM_DOUBLE,  "rem-double", k23x, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide | verify_flags::VerifyRegCWide},
+ /* 0xb0 */ {ADD_INT_2ADDR,  "add-int/2addr", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0xb1 */ {SUB_INT_2ADDR,  "sub-int/2addr", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0xb2 */ {MUL_INT_2ADDR,  "mul-int/2addr", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0xb3 */ {DIV_INT_2ADDR,  "div-int/2addr", k12x, NoIndex,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0xb4 */ {REM_INT_2ADDR,  "rem-int/2addr", k12x, NoIndex,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0xb5 */ {AND_INT_2ADDR,  "and-int/2addr", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0xb6 */ {OR_INT_2ADDR,  "or-int/2addr", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0xb7 */ {XOR_INT_2ADDR,  "xor-int/2addr", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0xb8 */ {SHL_INT_2ADDR,  "shl-int/2addr", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0xb9 */ {SHR_INT_2ADDR,  "shr-int/2addr", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0xba */ {USHR_INT_2ADDR,  "ushr-int/2addr", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0xbb */ {ADD_LONG_2ADDR,  "add-long/2addr", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide},
+ /* 0xbc */ {SUB_LONG_2ADDR,  "sub-long/2addr", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide},
+ /* 0xbd */ {MUL_LONG_2ADDR,  "mul-long/2addr", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide},
+ /* 0xbe */ {DIV_LONG_2ADDR,  "div-long/2addr", k12x, NoIndex,  flags::Continue | flags::Throw,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide},
+ /* 0xbf */ {REM_LONG_2ADDR,  "rem-long/2addr", k12x, NoIndex,  flags::Continue | flags::Throw,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide},
+ /* 0xc0 */ {AND_LONG_2ADDR,  "and-long/2addr", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide},
+ /* 0xc1 */ {OR_LONG_2ADDR,  "or-long/2addr", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide},
+ /* 0xc2 */ {XOR_LONG_2ADDR,  "xor-long/2addr", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide},
+ /* 0xc3 */ {SHL_LONG_2ADDR,  "shl-long/2addr", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegB},
+ /* 0xc4 */ {SHR_LONG_2ADDR,  "shr-long/2addr", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegB},
+ /* 0xc5 */ {USHR_LONG_2ADDR,  "ushr-long/2addr", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegB},
+ /* 0xc6 */ {ADD_FLOAT_2ADDR,  "add-float/2addr", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0xc7 */ {SUB_FLOAT_2ADDR,  "sub-float/2addr", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0xc8 */ {MUL_FLOAT_2ADDR,  "mul-float/2addr", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0xc9 */ {DIV_FLOAT_2ADDR,  "div-float/2addr", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0xca */ {REM_FLOAT_2ADDR,  "rem-float/2addr", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0xcb */ {ADD_DOUBLE_2ADDR,  "add-double/2addr", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide},
+ /* 0xcc */ {SUB_DOUBLE_2ADDR,  "sub-double/2addr", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide},
+ /* 0xcd */ {MUL_DOUBLE_2ADDR,  "mul-double/2addr", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide},
+ /* 0xce */ {DIV_DOUBLE_2ADDR,  "div-double/2addr", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide},
+ /* 0xcf */ {REM_DOUBLE_2ADDR,  "rem-double/2addr", k12x, NoIndex,  flags::Continue,  verify_flags::VerifyRegAWide | verify_flags::VerifyRegBWide},
+ /* 0xd0 */ {ADD_INT_LIT16,  "add-int/lit16", k22s, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0xd1 */ {RSUB_INT,  "rsub-int", k22s, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0xd2 */ {MUL_INT_LIT16,  "mul-int/lit16", k22s, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0xd3 */ {DIV_INT_LIT16,  "div-int/lit16", k22s, NoIndex,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0xd4 */ {REM_INT_LIT16,  "rem-int/lit16", k22s, NoIndex,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0xd5 */ {AND_INT_LIT16,  "and-int/lit16", k22s, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0xd6 */ {OR_INT_LIT16,  "or-int/lit16", k22s, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0xd7 */ {XOR_INT_LIT16,  "xor-int/lit16", k22s, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0xd8 */ {ADD_INT_LIT8,  "add-int/lit8", k22b, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0xd9 */ {RSUB_INT_LIT8,  "rsub-int/lit8", k22b, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0xda */ {MUL_INT_LIT8,  "mul-int/lit8", k22b, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0xdb */ {DIV_INT_LIT8,  "div-int/lit8", k22b, NoIndex,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0xdc */ {REM_INT_LIT8,  "rem-int/lit8", k22b, NoIndex,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0xdd */ {AND_INT_LIT8,  "and-int/lit8", k22b, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0xde */ {OR_INT_LIT8,  "or-int/lit8", k22b, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0xdf */ {XOR_INT_LIT8,  "xor-int/lit8", k22b, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0xe0 */ {SHL_INT_LIT8,  "shl-int/lit8", k22b, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0xe1 */ {SHR_INT_LIT8,  "shr-int/lit8", k22b, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
+ /* 0xe2 */ {USHR_INT_LIT8,  "ushr-int/lit8", k22b, NoIndex,  flags::Continue,  verify_flags::VerifyRegA | verify_flags::VerifyRegB},
  /* 0xe3 */ {UNUSED_E3,  "unused-e3", k10x, Unknown,  0,  verify_flags::VerifyError},
  /* 0xe4 */ {UNUSED_E4,  "unused-e4", k10x, Unknown,  0,  verify_flags::VerifyError},
  /* 0xe5 */ {UNUSED_E5,  "unused-e5", k10x, Unknown,  0,  verify_flags::VerifyError},
@@ -887,3 +1053,19 @@ insn_desc_table!(
  /* 0xfe */ {CONST_METHOD_HANDLE,  "const-method-handle", k21c, MethodHandleRef,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegBMethodHandle},
  /* 0xff */ {CONST_METHOD_TYPE,  "const-method-type", k21c, ProtoRef,  flags::Continue | flags::Throw,  verify_flags::VerifyRegA | verify_flags::VerifyRegBPrototype},
 );
+
+// >>> begin python module export
+#[cfg(feature = "python")]
+#[pyo3::pymodule(name = "code")]
+pub(crate) mod py_code {
+    #[pymodule_export]
+    use super::{PyDexCode, PyDexFormat, PyDexIndexType, PyInstruction};
+
+    #[pymodule_export]
+    use crate::file::PyCodeItemAccessor;
+
+    // constants
+    #[pymodule_export]
+    use super::{py_code_flags, py_signatures, py_flags, py_verify_flags};
+}
+// <<< end python module export

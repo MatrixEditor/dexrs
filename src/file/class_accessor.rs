@@ -1,3 +1,9 @@
+#[cfg(feature = "python")]
+use std::sync::Arc;
+
+#[cfg(feature = "python")]
+use pyo3::PyResult;
+
 use super::{ClassDef, DexContainer, DexFile, InvokeType, ACC_STATIC};
 use crate::{
     dex_err,
@@ -7,12 +13,18 @@ use crate::{
     Result,
 };
 
+#[cfg(feature = "python")]
+use crate::py::rs_type_wrapper;
+
 pub trait ClassItemBase: Copy + Clone + Default {
     fn read(&mut self, data: &[u8], pos: &mut usize) -> Result<()>;
 
     fn next_section(&mut self);
 }
 
+// ----------------------------------------------------------------------------
+// Method
+// ----------------------------------------------------------------------------
 #[derive(Copy, Clone)]
 pub struct Method {
     pub index: u32,
@@ -76,6 +88,43 @@ impl Default for Method {
         }
     }
 }
+
+// >>> begin python export
+#[cfg(feature = "python")]
+rs_type_wrapper!(
+    Method,
+    PyDexMethod,
+    name: "Method",
+    module: "dexrs._internal.class_accessor"
+);
+
+#[cfg(feature = "python")]
+#[pyo3::pymethods]
+impl PyDexMethod {
+    #[getter]
+    pub fn index(&self) -> u32 {
+        self.0.index
+    }
+
+    #[getter]
+    pub fn access_flags(&self) -> u32 {
+        self.0.access_flags
+    }
+
+    #[getter]
+    pub fn code_offset(&self) -> u32 {
+        self.0.code_offset
+    }
+
+    pub fn is_static_or_direct(&self) -> bool {
+        self.0.is_static_or_direct
+    }
+}
+// <<< end python export
+
+// ----------------------------------------------------------------------------
+// Field
+// ----------------------------------------------------------------------------
 #[derive(Copy, Clone)]
 pub struct Field {
     pub index: u32,
@@ -114,6 +163,37 @@ impl Default for Field {
     }
 }
 
+// >>> begin python export
+#[cfg(feature = "python")]
+rs_type_wrapper!(
+    Field,
+    PyDexField,
+    name: "Field",
+    module: "dexrs._internal.class_accessor"
+);
+
+#[cfg(feature = "python")]
+#[pyo3::pymethods]
+impl PyDexField {
+    #[getter]
+    pub fn index(&self) -> u32 {
+        self.0.index
+    }
+
+    #[getter]
+    pub fn access_flags(&self) -> u32 {
+        self.0.access_flags
+    }
+
+    pub fn is_static(&self) -> bool {
+        self.0.is_static
+    }
+}
+// <<< end python export
+
+// ----------------------------------------------------------------------------
+// ClassAccessor
+// ----------------------------------------------------------------------------
 pub struct ClassAccessor<'dex> {
     ptr_pos: usize,
     class_data: &'dex [u8],
@@ -332,6 +412,86 @@ impl<'a> ClassAccessor<'a> {
     }
 }
 
+// >>> begin python export
+// Python-side of the class accessor
+//
+// However, this <'static> may seem invalid, there's actually no need for us to
+// use mem::transmute here, because only Rust can create instances of this type.
+// Since the DexFile was already converteed to be 'static, this is also valid.
+#[cfg(feature = "python")]
+rs_type_wrapper!(
+    ClassAccessor<'static>,
+    PyClassAccessor,
+    RsClassAccessor,
+    name: "ClassAccessor",
+    module: "dexrs._internal.class_accessor"
+);
+
+#[cfg(feature = "python")]
+#[pyo3::pymethods]
+impl PyClassAccessor {
+    // no constructor
+    #[getter]
+    pub fn num_fields(&self) -> usize {
+        self.inner.0.num_fields()
+    }
+
+    #[getter]
+    pub fn num_methods(&self) -> usize {
+        self.inner.0.num_methods()
+    }
+
+    #[getter]
+    pub fn num_static_fields(&self) -> u32 {
+        self.inner.0.num_static_fields
+    }
+
+    #[getter]
+    pub fn num_instance_fields(&self) -> u32 {
+        self.inner.0.num_instance_fields
+    }
+
+    #[getter]
+    pub fn num_direct_methods(&self) -> u32 {
+        self.inner.0.num_direct_methods
+    }
+
+    #[getter]
+    pub fn num_virtual_methods(&self) -> u32 {
+        self.inner.0.num_virtual_methods
+    }
+
+    pub fn get_fields(&self) -> PyResult<Vec<PyDexField>> {
+        Ok(self.inner.0.get_fields().map(Into::into).collect())
+    }
+
+    pub fn get_static_fieds(&self) -> PyResult<Vec<PyDexField>> {
+        Ok(self.inner.0.get_static_fieds().map(Into::into).collect())
+    }
+
+    pub fn get_instance_fields(&self) -> PyResult<Vec<PyDexField>> {
+        Ok(self.inner.0.get_instance_fields().map(Into::into).collect())
+    }
+
+    pub fn get_methods(&self) -> PyResult<Vec<PyDexMethod>> {
+        Ok(self.inner.0.get_methods()?.map(Into::into).collect())
+    }
+
+    pub fn get_virtual_methods(&self) -> PyResult<Vec<PyDexMethod>> {
+        Ok(self
+            .inner
+            .0
+            .get_virtual_methods()?
+            .map(Into::into)
+            .collect())
+    }
+
+    pub fn get_direct_methods(&self) -> PyResult<Vec<PyDexMethod>> {
+        Ok(self.inner.0.get_direct_methods()?.map(Into::into).collect())
+    }
+}
+// <<< end python export
+
 pub struct DataIterator<'a, T: ClassItemBase> {
     class_data: &'a [u8],
     value: T,
@@ -389,4 +549,12 @@ impl<'a, T: ClassItemBase> Iterator for DataIterator<'a, T> {
         }
         return None;
     }
+}
+
+// >>> begin python module export
+#[cfg(feature = "python")]
+#[pyo3::pymodule]
+pub mod py_class_accessor {
+    #[pymodule_export]
+    use super::{PyClassAccessor, PyDexField, PyDexMethod};
 }

@@ -17,20 +17,26 @@ pub(crate) mod py;
 mod _internal {
 
     #[pymodule_export]
-    use crate::py::container::py_container;
+    use crate::file::container::py_container;
 
     #[pymodule_export]
     use crate::py::file::py_file;
 
     #[pymodule_export]
-    use crate::py::error::py_error;
+    use crate::error::py_error;
 
     #[pymodule_export]
-    use crate::py::structs::py_structs;
+    use crate::file::structs::py_structs;
 
     #[pymodule_export]
-    use crate::py::mutf8::py_mutf8;
+    use crate::utf::py_utf;
 
     #[pymodule_export]
-    use crate::py::class_accessor::py_class_accessor;
+    use crate::leb128::py_leb128;
+
+    #[pymodule_export]
+    use crate::file::class_accessor::py_class_accessor;
+
+    #[pymodule_export]
+    use crate::file::instruction::py_code;
 }

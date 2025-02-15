@@ -209,3 +209,33 @@ impl Debug for DexError {
         write!(f, "{}", self)
     }
 }
+
+#[cfg(feature = "python")]
+#[pyo3::pymodule(name = "error")]
+pub(crate) mod py_error {
+    use pyo3::exceptions::PyException;
+
+    pyo3::create_exception!(dexrs._internal.error, PyDexError, PyException);
+
+    impl From<super::DexError> for pyo3::PyErr {
+        fn from(err: super::DexError) -> pyo3::PyErr {
+            PyDexError::new_err(err.to_string())
+        }
+    }
+
+    #[pymodule_export]
+    use PyDexError as PyDexErrorExport;
+
+    // generic errors not wrapped by dexrs
+    #[derive(Debug, thiserror::Error)]
+    pub enum GenericError {
+        #[error(transparent)]
+        IOError(#[from] std::io::Error),
+    }
+
+    impl From<GenericError> for pyo3::PyErr {
+        fn from(err: GenericError) -> pyo3::PyErr {
+            pyo3::exceptions::PyIOError::new_err(err.to_string())
+        }
+    }
+}

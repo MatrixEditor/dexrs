@@ -58,6 +58,13 @@ class ClassDef:
     class_data_off: int
     static_values_off: int
 
-
 class TypeItem:
     type_idx: int
+
+class CodeItem:
+    registers_size: int
+    ins_size: int
+    outs_size: int
+    tries_size: int
+    debug_info_off: int
+    insns_size: int

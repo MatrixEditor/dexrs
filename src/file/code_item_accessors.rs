@@ -1,7 +1,21 @@
+#[cfg(feature = "python")]
+use pyo3::PyResult;
+#[cfg(feature = "python")]
+use std::sync::Arc;
+
+#[cfg(feature = "python")]
+use crate::py::rs_type_wrapper;
+
 use crate::Result;
 
 use super::{CodeItem, DexContainer, DexFile, Instruction};
 
+#[cfg(feature = "python")]
+use super::{PyDexCodeItem, PyInstruction};
+
+// ----------------------------------------------------------------------------
+// CodeItemAccessor
+// ----------------------------------------------------------------------------
 pub struct CodeItemAccessor<'a> {
     code_off: u32,
     code_item: &'a CodeItem,
@@ -105,6 +119,83 @@ impl<'a> IntoIterator for &'a CodeItemAccessor<'a> {
     }
 }
 
+// >>> begin python export
+#[cfg(feature = "python")]
+rs_type_wrapper!(
+    CodeItemAccessor<'static>,
+    PyCodeItemAccessor,
+    RsCodeItemAccessor,
+    name: "CodeItemAccessor",
+    module: "dexrs._internal.code"
+);
+
+#[cfg(feature = "python")]
+#[pyo3::pymethods]
+impl PyCodeItemAccessor {
+    #[getter]
+    pub fn insns_size_in_code_units(&self) -> u32 {
+        self.inner.0.insns_size_in_code_units()
+    }
+
+    #[getter]
+    pub fn insns_size_in_bytes(&self) -> u32 {
+        self.inner.0.insns_size_in_bytes()
+    }
+
+    pub fn has_code(&self) -> bool {
+        self.inner.0.has_code()
+    }
+
+    #[getter]
+    pub fn code_off(&self) -> u32 {
+        self.inner.0.code_off()
+    }
+
+    #[getter]
+    pub fn code_item(&self) -> PyDexCodeItem {
+        self.inner.0.code_item().into()
+    }
+
+    #[getter]
+    pub fn registers_size(&self) -> u16 {
+        self.inner.0.registers_size()
+    }
+
+    #[getter]
+    pub fn ins_size(&self) -> u16 {
+        self.inner.0.ins_size()
+    }
+
+    #[getter]
+    pub fn outs_size(&self) -> u16 {
+        self.inner.0.outs_size()
+    }
+
+    #[getter]
+    pub fn tries_size(&self) -> u16 {
+        self.inner.0.tries_size()
+    }
+
+    pub fn insns_raw(&self) -> &[u16] {
+        self.inner.0.insns()
+    }
+
+    pub fn inst_at(&self, pc: u32) -> PyInstruction {
+        self.inner.0.inst_at(pc).into()
+    }
+
+    // REVISIT: dex_pc is unused here
+    pub fn insns(&self) -> PyResult<Vec<PyInstruction>> {
+        Ok(DexInstructionIterator::new(self.inner.0.insns)
+            .map(Into::into)
+            .collect())
+    }
+}
+// <<< end python export
+
+// ----------------------------------------------------------------------------
+// Instruction Iterator
+// ----------------------------------------------------------------------------
 pub struct DexInstructionIterator<'a> {
     instructions: &'a [u16],
     pc: usize,

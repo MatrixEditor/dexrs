@@ -1,5 +1,13 @@
 use plain::Plain;
 
+#[cfg(feature = "python")]
+use crate::py::{rs_struct_fields, rs_struct_wrapper};
+#[cfg(feature = "python")]
+use std::sync::Arc;
+
+// --------------------------------------------------------------------
+// StringId
+// --------------------------------------------------------------------
 pub type StringIndex = u32;
 
 #[repr(C)]
@@ -17,6 +25,18 @@ impl StringId {
     }
 }
 
+// >>> begin python export
+#[cfg(feature = "python")]
+rs_struct_wrapper!("StringId", PyDexStringId, StringId);
+#[cfg(feature = "python")]
+rs_struct_fields!(PyDexStringId, {
+    (string_data_off, StringIndex),
+},);
+/// <<< end python export
+
+// --------------------------------------------------------------------
+// TypeId
+// --------------------------------------------------------------------
 pub type TypeIndex = u16;
 
 #[repr(C)]
@@ -27,6 +47,18 @@ pub struct TypeId {
 
 unsafe impl plain::Plain for TypeId {}
 
+// >>> begin python export
+#[cfg(feature = "python")]
+rs_struct_wrapper!("TypeId", PyDexTypeId, TypeId);
+#[cfg(feature = "python")]
+rs_struct_fields!(PyDexTypeId, {
+    (descriptor_idx, StringIndex),
+},);
+/// <<< end python export
+
+// --------------------------------------------------------------------
+// FieldId
+// --------------------------------------------------------------------
 pub type FieldIndex = u32;
 
 #[repr(C)]
@@ -39,6 +71,20 @@ pub struct FieldId {
 
 unsafe impl plain::Plain for FieldId {}
 
+// >>> begin python export
+#[cfg(feature = "python")]
+rs_struct_wrapper!("FieldId", PyDexFieldId, FieldId);
+#[cfg(feature = "python")]
+rs_struct_fields!(PyDexFieldId, {
+    (class_idx, TypeIndex),
+    (type_idx, TypeIndex),
+    (name_idx, StringIndex),
+},);
+/// <<< end python export
+
+// --------------------------------------------------------------------
+// ProtoId
+// --------------------------------------------------------------------
 pub type ProtoIndex = u16;
 
 #[repr(C)]
@@ -52,6 +98,22 @@ pub struct ProtoId {
 
 unsafe impl plain::Plain for ProtoId {}
 
+// >>> begin python export
+#[cfg(feature = "python")]
+rs_struct_wrapper!("ProtoId", PyDexProtoId, ProtoId);
+#[cfg(feature = "python")]
+rs_struct_fields!(PyDexProtoId, {
+    (shorty_idx, StringIndex),
+    (return_type_idx, TypeIndex),
+    (parameters_off, u32),
+},);
+/// <<< end python export
+
+// --------------------------------------------------------------------
+// MethodId
+// --------------------------------------------------------------------
+pub type MethodIndex = u32;
+
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub struct MethodId {
@@ -61,6 +123,22 @@ pub struct MethodId {
 }
 
 unsafe impl plain::Plain for MethodId {}
+
+// >>> begin python export
+#[cfg(feature = "python")]
+rs_struct_wrapper!("MethodId", PyDexMethodId, MethodId);
+#[cfg(feature = "python")]
+rs_struct_fields!(PyDexMethodId, {
+    (class_idx, TypeIndex),
+    (proto_idx, ProtoIndex),
+    (name_idx, StringIndex),
+},);
+// <<< end python export
+
+// --------------------------------------------------------------------
+// ClassDef
+// --------------------------------------------------------------------
+pub type ClassDefIndex = u32;
 
 #[repr(C)]
 #[derive(Debug, Clone)]
@@ -79,6 +157,25 @@ pub struct ClassDef {
 
 unsafe impl plain::Plain for ClassDef {}
 
+// >>> begin python export
+#[cfg(feature = "python")]
+rs_struct_wrapper!("ClassDef", PyDexClassDef, ClassDef);
+#[cfg(feature = "python")]
+rs_struct_fields!(PyDexClassDef, {
+    (class_idx, TypeIndex),
+    (access_flags, u32),
+    (superclass_idx, TypeIndex),
+    (interfaces_off, u32),
+    (source_file_idx, StringIndex),
+    (annotations_off, u32),
+    (class_data_off, u32),
+    (static_values_off, u32),
+},);
+// <<< end python export
+
+// --------------------------------------------------------------------
+// Typeitem
+// --------------------------------------------------------------------
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub struct TypeItem {
@@ -89,6 +186,18 @@ unsafe impl plain::Plain for TypeItem {}
 
 pub type TypeList<'a> = &'a [TypeItem];
 
+// >>> begin python export
+#[cfg(feature = "python")]
+rs_struct_wrapper!("TypeItem", PyDexTypeItem, TypeItem);
+#[cfg(feature = "python")]
+rs_struct_fields!(PyDexTypeItem, {
+    (type_idx, TypeIndex),
+},);
+// <<< end python export
+
+// --------------------------------------------------------------------
+// MapItem (private)
+// --------------------------------------------------------------------
 #[repr(C)]
 #[derive(Debug)]
 pub struct MapItem {
@@ -129,8 +238,11 @@ pub enum MapItemType {
     HiddenapiClassData = 0xF000,
 }
 
+// --------------------------------------------------------------------
+// MethodHandleItem
+// --------------------------------------------------------------------
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MethodHandleItem {
     pub method_handle_type: TypeIndex,
     reserved1_: u16,
@@ -140,14 +252,39 @@ pub struct MethodHandleItem {
 
 unsafe impl plain::Plain for MethodHandleItem {}
 
+// >>> begin python export
+#[cfg(feature = "python")]
+rs_struct_wrapper!("MethodHandleItem", PyDexMethodHandleItem, MethodHandleItem);
+#[cfg(feature = "python")]
+rs_struct_fields!(PyDexMethodHandleItem, {
+    (method_handle_type, TypeIndex),
+    (field_or_method_idx, u16),
+},);
+// <<< end python export
+
+// --------------------------------------------------------------------
+// CallSiteIdItem
+// --------------------------------------------------------------------
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CallSiteIdItem {
     pub data_off: u32, // Offset into data section pointing to encoded array items.
 }
 
 unsafe impl plain::Plain for CallSiteIdItem {}
 
+// >>> begin python export
+#[cfg(feature = "python")]
+rs_struct_wrapper!("CallSiteIdItem", PyDexCallSiteIdItem, CallSiteIdItem);
+#[cfg(feature = "python")]
+rs_struct_fields!(PyDexCallSiteIdItem, {
+    (data_off, u32),
+},);
+// <<< end python export
+
+// --------------------------------------------------------------------
+// HiddenapiClassData (private)
+// --------------------------------------------------------------------
 #[repr(C)]
 #[derive(Debug)]
 pub struct HiddenapiClassData<'a> {
@@ -169,8 +306,11 @@ impl<'a> HiddenapiClassData<'a> {
 
 unsafe impl<'a> plain::Plain for HiddenapiClassData<'a> {}
 
+// --------------------------------------------------------------------
+// CodeItem
+// --------------------------------------------------------------------
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CodeItem {
     pub registers_size: u16,
     pub ins_size: u16,
@@ -182,8 +322,25 @@ pub struct CodeItem {
 
 unsafe impl plain::Plain for CodeItem {}
 
+// >>> begin python export
+#[cfg(feature = "python")]
+rs_struct_wrapper!("CodeItem", PyDexCodeItem, CodeItem);
+#[cfg(feature = "python")]
+rs_struct_fields!(PyDexCodeItem, {
+    (registers_size, u16),
+    (ins_size, u16),
+    (outs_size, u16),
+    (tries_size, u16),
+    (debug_info_off, u32),
+    (insns_size, u32),
+},);
+// <<< end python export
+
+// --------------------------------------------------------------------
+// TryItem
+// --------------------------------------------------------------------
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TryItem {
     pub start_addr: u32,
     pub insn_count: u16,
@@ -192,8 +349,22 @@ pub struct TryItem {
 
 unsafe impl plain::Plain for TryItem {}
 
+// >>> begin python export
+#[cfg(feature = "python")]
+rs_struct_wrapper!("TryItem", PyDexTryItem, TryItem);
+#[cfg(feature = "python")]
+rs_struct_fields!(PyDexTryItem, {
+    (start_addr, u32),
+    (insn_count, u16),
+    (handler_off, u16),
+},);
+// <<< end python export
+
+// --------------------------------------------------------------------
+// AnnotationsDirectoryItem
+// --------------------------------------------------------------------
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AnnotationsDirectoryItem {
     pub class_annotations_off: u32,
     pub fields_size: u32,
@@ -203,8 +374,27 @@ pub struct AnnotationsDirectoryItem {
 
 unsafe impl plain::Plain for AnnotationsDirectoryItem {}
 
+// >>> begin python export
+#[cfg(feature = "python")]
+rs_struct_wrapper!(
+    "AnnotationsDirectoryItem",
+    PyDexAnnotationsDirectoryItem,
+    AnnotationsDirectoryItem
+);
+#[cfg(feature = "python")]
+rs_struct_fields!(PyDexAnnotationsDirectoryItem, {
+    (class_annotations_off, u32),
+    (fields_size, u32),
+    (methods_size, u32),
+    (parameters_size, u32),
+},);
+// <<< end python export
+
+// --------------------------------------------------------------------
+// FieldAnnotationsItem
+// --------------------------------------------------------------------
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FieldAnnotationsItem {
     pub field_idx: u32,
     pub annotations_off: u32,
@@ -212,8 +402,25 @@ pub struct FieldAnnotationsItem {
 
 unsafe impl plain::Plain for FieldAnnotationsItem {}
 
+// >>> begin python export
+#[cfg(feature = "python")]
+rs_struct_wrapper!(
+    "FieldAnnotationsItem",
+    PyDexFieldAnnotationsItem,
+    FieldAnnotationsItem
+);
+#[cfg(feature = "python")]
+rs_struct_fields!(PyDexFieldAnnotationsItem, {
+    (field_idx, u32),
+    (annotations_off, u32),
+},);
+// <<< end python export
+
+// --------------------------------------------------------------------
+// MethodAnnotationsItem
+// --------------------------------------------------------------------
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MethodAnnotationsItem {
     pub method_idx: u32,
     pub annotations_off: u32,
@@ -221,8 +428,25 @@ pub struct MethodAnnotationsItem {
 
 unsafe impl plain::Plain for MethodAnnotationsItem {}
 
+// >>> begin python export
+#[cfg(feature = "python")]
+rs_struct_wrapper!(
+    "MethodAnnotationsItem",
+    PyDexMethodAnnotationsItem,
+    MethodAnnotationsItem
+);
+#[cfg(feature = "python")]
+rs_struct_fields!(PyDexMethodAnnotationsItem, {
+    (method_idx, u32),
+    (annotations_off, u32),
+},);
+// <<< end python export
+
+// --------------------------------------------------------------------
+// ParameterAnnotationsItem
+// --------------------------------------------------------------------
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ParameterAnnotationsItem {
     pub method_idx: u32,
     pub annotations_off: u32,
@@ -230,6 +454,23 @@ pub struct ParameterAnnotationsItem {
 
 unsafe impl plain::Plain for ParameterAnnotationsItem {}
 
+// >>> begin python export
+#[cfg(feature = "python")]
+rs_struct_wrapper!(
+    "ParameterAnnotationsItem",
+    PyDexParameterAnnotationsItem,
+    ParameterAnnotationsItem
+);
+#[cfg(feature = "python")]
+rs_struct_fields!(PyDexParameterAnnotationsItem, {
+    (method_idx, u32),
+    (annotations_off, u32),
+},);
+// <<< end python export
+
+// --------------------------------------------------------------------
+// Annotations (private for now)
+// --------------------------------------------------------------------
 pub type AnnotationSetItem<'a> = &'a [u32];
 
 pub type EncodedArray = Vec<EncodedValue>;
@@ -274,3 +515,24 @@ pub struct AnnotationItem {
     pub visibility: u8,
     pub annotation: EncodedAnnotation,
 }
+
+// --------------------------------------------------------------------
+// Python API
+// --------------------------------------------------------------------
+// >>> begin python module export
+#[cfg(feature = "python")]
+#[pyo3::pymodule(name = "structs")]
+pub(crate) mod py_structs {
+
+    #[pymodule_export]
+    use super::{
+        PyDexAnnotationsDirectoryItem, PyDexCallSiteIdItem, PyDexClassDef, PyDexCodeItem,
+        PyDexFieldAnnotationsItem, PyDexFieldId, PyDexMethodAnnotationsItem, PyDexMethodHandleItem,
+        PyDexMethodId, PyDexParameterAnnotationsItem, PyDexProtoId, PyDexStringId, PyDexTryItem,
+        PyDexTypeId, PyDexTypeItem
+    };
+
+    #[pymodule_export]
+    use crate::file::header::PyDexHeader;
+}
+// <<< end python module export

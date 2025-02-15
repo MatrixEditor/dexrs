@@ -1,3 +1,7 @@
+#[cfg(feature = "python")]
+use crate::py::{rs_struct_fields, rs_struct_wrapper};
+#[cfg(feature = "python")]
+use std::sync::Arc;
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub struct Header {
@@ -113,3 +117,49 @@ pub struct HeaderV41 {
     pub container_size: u32, // total size of all dex files in the container.
     pub header_off: u32,     // offset of this dex's header in the container.
 }
+
+
+// >>> begin python export
+#[cfg(feature = "python")]
+rs_struct_wrapper!("Header", PyDexHeader, Header);
+#[cfg(feature = "python")]
+rs_struct_fields!(PyDexHeader, {
+    (checksum, u32),
+    (file_size, u32),
+    (header_size, u32),
+    (endian_tag, u32),
+    (link_size, u32),
+    (link_off, u32),
+    (map_off, u32),
+    (string_ids_size, u32),
+    (string_ids_off, u32),
+    (type_ids_size, u32),
+    (type_ids_off, u32),
+    (proto_ids_size, u32),
+    (proto_ids_off, u32),
+    (field_ids_size, u32),
+    (field_ids_off, u32),
+    (method_ids_size, u32),
+    (method_ids_off, u32),
+    (class_defs_size, u32),
+    (class_defs_off, u32),
+    (data_size, u32),
+    (data_off, u32),
+},
+
+#[getter]
+pub fn version_int(&self) -> u32 {
+    self.0.get_version()
+}
+
+#[getter]
+pub fn magic(&self) -> &[u8; 8] {
+    self.0.get_magic()
+}
+
+#[getter]
+pub fn signature(&self) -> &[u8; 20] {
+    self.0.get_signature()
+}
+);
+// <<< end python export
