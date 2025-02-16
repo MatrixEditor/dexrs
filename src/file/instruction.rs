@@ -134,14 +134,67 @@ impl PyInstruction {
     }
 
     #[staticmethod]
-    pub fn opcode_of(inst_data: u16) -> PyDexCode {
+    pub fn get_opcode_of(inst_data: u16) -> PyDexCode {
         let opcode = Instruction::opcode_of(inst_data);
         Instruction::format_desc_of(opcode).py_opcode
     }
 
     #[staticmethod]
-    pub fn name_of(opcode: PyDexCode) -> &'static str {
+    pub fn get_name_of(opcode: PyDexCode) -> &'static str {
         Instruction::format_desc_of(opcode.into()).name
+    }
+
+    #[staticmethod]
+    pub fn get_format_of(opcode: PyDexCode) -> PyDexFormat {
+        Instruction::format_of(opcode.into()).into()
+    }
+
+    #[staticmethod]
+    pub fn get_index_type_of(opcode: PyDexCode) -> PyDexIndexType {
+        Instruction::index_type_of(opcode.into()).into()
+    }
+
+    #[staticmethod]
+    pub fn get_flags_of(opcode: PyDexCode) -> u8 {
+        Instruction::flags_of(opcode.into())
+    }
+
+    #[staticmethod]
+    pub fn get_verify_flags_of(opcode: PyDexCode) -> u32 {
+        Instruction::verify_flags_of(opcode.into())
+    }
+
+    // same interface for instance methods
+    #[inline]
+    #[getter]
+    pub fn opcode(&self) -> PyDexCode {
+        self.inner.0.opcode().into()
+    }
+
+    #[inline]
+    #[getter]
+    pub fn format(&self) -> PyDexFormat {
+        self.inner.0.format().into()
+    }
+
+    #[inline]
+    #[getter]
+    pub fn name(&self) -> &'static str {
+        self.inner.0.name()
+    }
+
+    #[inline]
+    #[getter]
+    pub fn verify_flags(&self) -> u32 {
+        self.inner.0.verify_flags()
+    }
+
+    pub fn next(&self) -> Option<PyInstruction> {
+        self.inner.0.next().map(Into::into)
+    }
+
+    pub fn size_in_code_units(&self) -> usize {
+        self.inner.0.size_in_code_units()
     }
 }
 // <<< end python export
@@ -168,8 +221,8 @@ macro_rules! define_formats {
         }
 
         #[cfg(feature = "python")]
-        impl From<Format> for PyDexFormat {
-            fn from(f: Format) -> Self {
+        impl From<&Format> for PyDexFormat {
+            fn from(f: &Format) -> Self {
                 match f {
                     $(Format::$fmtids => PyDexFormat::$fmtids,)*
                 }
@@ -230,8 +283,8 @@ macro_rules! define_index_types {
         }
 
         #[cfg(feature = "python")]
-        impl From<IndexType> for PyDexIndexType {
-            fn from(f: IndexType) -> Self {
+        impl From<&IndexType> for PyDexIndexType {
+            fn from(f: &IndexType) -> Self {
                 match f {
                     $(IndexType::$index_ty => PyDexIndexType::$index_ty,)*
                 }
@@ -377,8 +430,12 @@ impl<'a> Instruction<'a> {
         &self.format_desc().name
     }
 
-    pub fn next(&self) -> Result<Instruction<'a>> {
-        self.relative_at(self.size_in_code_units())
+    pub fn next(&self) -> Option<Instruction<'a>> {
+        // we check, if the next instruction stores at least two bytes
+        if self.0.len() <= self.size_in_code_units() + 2 {
+            return None;
+        }
+        return Some(Instruction::at(&self.0[self.size_in_code_units()..]));
     }
 
     #[inline(always)]
@@ -789,6 +846,16 @@ macro_rules! insn_desc_table {
                 Instruction::opcode_of(self as u8 as u16)
             }
         }
+
+        #[cfg(feature = "python")]
+        impl From<Code> for PyDexCode {
+            #[inline]
+            fn from(code: Code) -> Self {
+                match code {
+                    $(Code::$code => PyDexCode::$code,)*
+                }
+            }
+        }
     };
 }
 
@@ -1066,6 +1133,6 @@ pub(crate) mod py_code {
 
     // constants
     #[pymodule_export]
-    use super::{py_code_flags, py_signatures, py_flags, py_verify_flags};
+    use super::{py_code_flags, py_flags, py_signatures, py_verify_flags};
 }
 // <<< end python module export
