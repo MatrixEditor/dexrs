@@ -1,5 +1,21 @@
 # DEXrs
 
+> [!IMPORTANT]
+> Branch `v2-rewrite` contains a complete rewrite of this library including a Python binding.  Installation is as follows:
+> 
+> Crate:
+> ```bash
+> # add to project
+> cargo add --git https://github.com/MatrixEditor/dexrs --branch dev/v2-rewrite
+> # install lib
+> cargo install --git https://github.com/MatrixEditor/dexrs --branch dev/v2-rewrite
+> ```
+>
+> Python Binding
+> ```bash
+> pip install -v git+https://github.com/MatrixEditor/dexrs@dev/v2-rewrite
+> ```
+
 **DEXrs** is an exploratory project in Rust aimed at developing a decompiler for Android executable files (DEX files).
 
 #### What this project already covers:
