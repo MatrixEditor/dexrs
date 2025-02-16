@@ -3,9 +3,11 @@ use crate::{
     Result,
 };
 
+use super::StringIndex;
+
 pub enum SourceFile {
     This,
-    Other(u32), // index to file
+    Other(StringIndex), // index to file
 }
 
 #[rustfmt::skip]
@@ -156,7 +158,7 @@ impl<'dex> DebugInfoParameterNamesIterator<'dex> {
         let size = decode_leb128_off::<u32>(&ptr, &mut pos)? as usize;
         Ok(Self {
             ptr,
-            offset,
+            offset: pos,
             size,
             idx: 0,
         })
@@ -172,9 +174,7 @@ impl<'a> Iterator for DebugInfoParameterNamesIterator<'a> {
         }
         self.idx += 1;
         match decode_leb128p1_off(&self.ptr, &mut self.offset) {
-            Ok(v) => {
-                Some(v as u32)
-            }
+            Ok(v) => Some(v as u32),
             Err(_) => None,
         }
     }

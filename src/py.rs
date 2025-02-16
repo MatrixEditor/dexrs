@@ -44,6 +44,7 @@ macro_rules! rs_type_wrapper {
 macro_rules! rs_struct_wrapper {
     ($name:literal, $py_type:ident, $rust_type:ident) => {
         #[cfg(feature = "python")]
+        #[derive(Debug, Clone)]
         #[pyo3::pyclass(name = $name, module = "dexrs._internal.structs")]
         pub struct $py_type(pub Arc<$rust_type>);
 

@@ -1,3 +1,5 @@
+from typing import List
+
 class Header:
     checksum: int
     file_size: int
@@ -68,3 +70,93 @@ class CodeItem:
     tries_size: int
     debug_info_off: int
     insns_size: int
+
+class TryItem:
+    start_addr: int
+    insn_count: int
+    handler_off: int
+
+class AnnotationsDirectoryItem:
+    class_annotations_off: int
+    fields_size: int
+    methods_size: int
+    parameters_size: int
+
+class FieldAnnotationsItem:
+    field_idx: int
+    annotations_off: int
+
+class MethodAnnotationsItem:
+    method_idx: int
+    annotations_off: int
+
+class ParameterAnnotationsItem:
+    method_idx: int
+    annotations_off: int
+
+class EncodedValue:
+    class Null:
+        pass
+
+    class Boolean:
+        value: bool
+
+    class Byte:
+        value: int
+
+    class Char:
+        value: int
+
+    class Short:
+        value: int
+
+    class Integer:
+        value: int
+
+    class Float:
+        value: float
+
+    class Long:
+        value: int
+
+    class Double:
+        value: float
+
+    class String:
+        index: int
+
+    class Type:
+        index: int
+
+    class Field:
+        index: int
+
+    class Method:
+        index: int
+
+    class MethodType:
+        index: int
+
+    class MethodHandle:
+        index: int
+
+    class Enum:
+        index: int
+
+    class Array:
+        elements: List[EncodedValue]
+
+    class Annotation:
+        annotation: EncodedAnnotation
+
+class AnnotationElement:
+    name_idx: int
+    value: EncodedValue
+
+class EncodedAnnotation:
+    type_idx: int
+    elements: List[AnnotationElement]
+
+class AnnotationItem:
+    visibility: int
+    annotation: EncodedAnnotation

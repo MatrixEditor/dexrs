@@ -19,7 +19,7 @@ pub struct ClassAnnotationsAccessor<'a> {
 }
 
 impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
-    pub fn get_class_ann_accessor(
+    pub fn get_class_annotation_accessor(
         &'a self,
         class_def: &'a ClassDef,
     ) -> Result<ClassAnnotationsAccessor<'a>> {
@@ -344,13 +344,7 @@ impl EncodedValue {
             EncodedValueType::Array => EncodedValue::Array(EncodedValue::from_encoded_array(value, offset)?),
             EncodedValueType::Annotation => EncodedValue::Annotation(EncodedValue::from_encoded_annotation(value, offset)?),
             EncodedValueType::Null => EncodedValue::Null,
-            EncodedValueType::Boolean => {
-                if value_arg == 0 {
-                    EncodedValue::False
-                } else {
-                    EncodedValue::True
-                }
-            }
+            EncodedValueType::Boolean => EncodedValue::Boolean(value_arg != 0),
         })
     }
 

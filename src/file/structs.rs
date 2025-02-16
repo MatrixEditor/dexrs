@@ -475,46 +475,156 @@ pub type AnnotationSetItem<'a> = &'a [u32];
 
 pub type EncodedArray = Vec<EncodedValue>;
 
-#[derive(Debug)]
-pub enum EncodedValue {
-    Byte(i8),
-    Short(i16),
-    Char(u16),
-    Int(i32),
-    Long(i64),
-    Float(f32),
-    Double(f64),
-    MethodType(u32),
-    MethodHandle(u32),
-    String(u32),
-    Type(u32),
-    Field(u32),
-    Method(u32),
-    Enum(u32),
-    Array(EncodedArray),
-    Annotation(EncodedAnnotation),
-    Null,
-    True,
-    False,
+// --------------------------------------------------------------------
+// Encoded Value
+// --------------------------------------------------------------------
+macro_rules! define_encoded_value {
+    ({ $(($primitive_name:ident: $primitive_py_name:ident=$primitive_ty:ty),)* }) => {
+        #[derive(Debug, Clone)]
+        pub enum EncodedValue {
+            $(
+                $primitive_name($primitive_ty),
+            )*
+            Array(EncodedArray),
+            Annotation(EncodedAnnotation),
+            Null,
+        }
+
+// >>> begin python export
+        // Python type will be an enum with variants from EncodedValue
+        #[cfg(feature = "python")]
+        #[derive(Clone)]
+        #[pyo3::pyclass(name = "EncodedValue", module = "dexrs._internal.structs")]
+        pub enum PyDexEncodedValue {
+            $(
+                $primitive_name { $primitive_py_name: $primitive_ty },
+            )*
+            Array{ elements: Vec<PyDexEncodedValue> },
+            Annotation{ annotation: PyDexEncodedAnnotation },
+            Null(),
+        }
+
+        #[cfg(feature = "python")]
+        impl From<&EncodedValue> for PyDexEncodedValue {
+            fn from(value: &EncodedValue) -> Self {
+                match value {
+                    $(
+                        EncodedValue::$primitive_name(value) => PyDexEncodedValue::$primitive_name { $primitive_py_name: *value },
+                    )*
+                    EncodedValue::Array(v) => PyDexEncodedValue::Array {
+                        elements: v.iter().map(Into::into).collect(),
+                    },
+                    EncodedValue::Annotation(v) => PyDexEncodedValue::Annotation {
+                        annotation: v.into(),
+                    },
+                    EncodedValue::Null => PyDexEncodedValue::Null(),
+                }
+            }
+        }
+// <<< end python export
+    };
 }
 
-#[derive(Debug)]
+define_encoded_value!({
+    (Byte: value=i8),
+    (Short: value=i16),
+    (Char: value=u16),
+    (Int: value=i32),
+    (Long: value=i64),
+    (Float: value=f32),
+    (Double: value=f64),
+    (MethodType: index=u32),
+    (MethodHandle: index=u32),
+    (String: index=u32),
+    (Type: index=u32),
+    (Field: index=u32),
+    (Method: index=u32),
+    (Enum: index=u32),
+    (Boolean: value=bool),
+});
+
+
+// --------------------------------------------------------------------
+// Annotation Element
+// --------------------------------------------------------------------
+#[derive(Debug, Clone)]
 pub struct AnnotationElement {
     pub name_idx: u32,
     pub(crate) value: EncodedValue,
 }
 
-#[derive(Debug)]
+// >>> begin python export
+#[cfg(feature = "python")]
+rs_struct_wrapper!(
+    "AnnotationElement",
+    PyDexAnnotationElement,
+    AnnotationElement
+);
+#[cfg(feature = "python")]
+rs_struct_fields!(PyDexAnnotationElement, {
+    (name_idx, u32),
+},
+
+#[getter]
+pub fn value(&self) -> PyDexEncodedValue {
+    let value = &self.0.value;
+    value.into()
+}
+);
+// <<< end python export
+
+// --------------------------------------------------------------------
+// Encoded Annotation
+// --------------------------------------------------------------------
+#[derive(Debug, Clone)]
 pub struct EncodedAnnotation {
     pub type_idx: u32,
     pub(crate) elements: Vec<AnnotationElement>,
 }
 
-#[derive(Debug)]
+// >>> begin python export
+#[cfg(feature = "python")]
+rs_struct_wrapper!(
+    "EncodedAnnotation",
+    PyDexEncodedAnnotation,
+    EncodedAnnotation
+);
+#[cfg(feature = "python")]
+rs_struct_fields!(PyDexEncodedAnnotation, {
+    (type_idx, u32),
+},
+
+#[getter]
+pub fn elements(&self) -> Vec<PyDexAnnotationElement> {
+    self.0.elements.iter().map(Into::into).collect()
+}
+);
+// <<< end python export
+
+// --------------------------------------------------------------------
+// Annotation Item
+// --------------------------------------------------------------------
+#[derive(Debug, Clone)]
 pub struct AnnotationItem {
     pub visibility: u8,
     pub annotation: EncodedAnnotation,
 }
+
+// >>> begin python export
+#[cfg(feature = "python")]
+rs_struct_wrapper!("AnnotationItem", PyDexAnnotationItem, AnnotationItem);
+#[cfg(feature = "python")]
+rs_struct_fields!(PyDexAnnotationItem, {
+    (visibility, u8),
+},
+
+#[getter]
+pub fn annotation(&self) -> PyDexEncodedAnnotation {
+    let a = &self.0.annotation;
+    a.into()
+}
+);
+// <<< end python export
 
 // --------------------------------------------------------------------
 // Python API
@@ -526,10 +636,11 @@ pub(crate) mod py_structs {
 
     #[pymodule_export]
     use super::{
-        PyDexAnnotationsDirectoryItem, PyDexCallSiteIdItem, PyDexClassDef, PyDexCodeItem,
-        PyDexFieldAnnotationsItem, PyDexFieldId, PyDexMethodAnnotationsItem, PyDexMethodHandleItem,
-        PyDexMethodId, PyDexParameterAnnotationsItem, PyDexProtoId, PyDexStringId, PyDexTryItem,
-        PyDexTypeId, PyDexTypeItem
+        PyDexAnnotationElement, PyDexAnnotationItem, PyDexAnnotationsDirectoryItem,
+        PyDexCallSiteIdItem, PyDexClassDef, PyDexCodeItem, PyDexEncodedAnnotation,
+        PyDexEncodedValue, PyDexFieldAnnotationsItem, PyDexFieldId, PyDexMethodAnnotationsItem,
+        PyDexMethodHandleItem, PyDexMethodId, PyDexParameterAnnotationsItem, PyDexProtoId,
+        PyDexStringId, PyDexTryItem, PyDexTypeId, PyDexTypeItem,
     };
 
     #[pymodule_export]
