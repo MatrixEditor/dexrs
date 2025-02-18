@@ -4,7 +4,10 @@
 #![no_main]
 #![allow(non_snake_case)]
 
-use dexrs::file::DexInstructionIterator;
+use dexrs::file::{
+    ComplexFromInst, DexInstructionIterator, FillArrayDataPayload, Instruction,
+    PackedSwitchPayload, SparseSwitchPayload,
+};
 
 extern crate dexrs;
 extern crate libfuzzer_sys;
@@ -17,6 +20,22 @@ libfuzzer_sys::fuzz_target!(|data: &[u8]| {
         for inst in iter {
             if let Ok(inst_dump) = inst.to_string(None) {
                 assert!(inst_dump.len() > 0);
+            }
+        }
+
+        // specifically target complex opcodes
+        // REVISIT: this check should be done when creating a new instruction
+        if bytes.len() >= 1 {
+            let inst = Instruction::at(bytes);
+            // these parsing methods MUST withstand random data
+            if let Ok(payload) = PackedSwitchPayload::from_inst(&inst) {
+                let _ = payload;
+            }
+            if let Ok(payload) = SparseSwitchPayload::from_inst(&inst) {
+                let _ = payload;
+            }
+            if let Ok(payload) = FillArrayDataPayload::from_inst(&inst) {
+                let _ = payload;
             }
         }
     }

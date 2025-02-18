@@ -1,5 +1,8 @@
+use core::slice;
 #[cfg(feature = "python")]
 use std::sync::Arc;
+
+use plain::Plain;
 
 #[cfg(feature = "python")]
 use crate::py::rs_type_wrapper;
@@ -9,6 +12,7 @@ use crate::{dex_err, error::DexError, Result};
 // ----------------------------------------------------------------------------
 // Instruction
 // ----------------------------------------------------------------------------
+#[repr(C)]
 pub struct Instruction<'a>(&'a [u16]);
 
 impl<'a> Instruction<'a> {
@@ -110,21 +114,27 @@ impl<'a> Instruction<'a> {
             code_flags::Custom
         }
     }
+
+    fn as_bytes(&self) -> &'a [u8] {
+        // since [u16] will always be a multiple of [u8], we can "safely"
+        // cast it
+        unsafe { slice::from_raw_parts(self.0.as_ptr() as *const u8, self.0.len() * 2) }
+    }
 }
 
 // >>> begin python export
 #[cfg(feature = "python")]
 rs_type_wrapper!(
     Instruction<'static>,
-    PyInstruction,
-    RsInstruction,
+    PyDexInstruction,
+    RsDexInstruction,
     name: "Instruction",
     module: "dexrs._internal.code"
 );
 
 #[cfg(feature = "python")]
 #[pyo3::pymethods]
-impl PyInstruction {
+impl PyDexInstruction {
     pub fn fetch16(&self, offset: u32) -> pyo3::PyResult<u16> {
         Ok(self.inner.0.fetch16(offset as usize)?)
     }
@@ -189,12 +199,29 @@ impl PyInstruction {
         self.inner.0.verify_flags()
     }
 
-    pub fn next(&self) -> Option<PyInstruction> {
+    pub fn next(&self) -> Option<PyDexInstruction> {
         self.inner.0.next().map(Into::into)
     }
 
     pub fn size_in_code_units(&self) -> usize {
         self.inner.0.size_in_code_units()
+    }
+
+    #[pyo3(signature = (py_dex_file=None))]
+    pub fn to_string<'py>(
+        &self,
+        py: pyo3::Python<'py>,
+        py_dex_file: Option<pyo3::Py<crate::py::file::PyDexFileImpl>>,
+    ) -> pyo3::PyResult<String> {
+        if py_dex_file.is_none() {
+            return Ok(self.inner.0.to_string::<&[u8]>(None)?);
+        }
+        Ok(match &py_dex_file.unwrap().try_borrow(py)?.inner.as_ref() {
+            crate::py::file::RsDexFile::InMemory { dex, .. } => {
+                self.inner.0.to_string(Some(dex))?
+            }
+            crate::py::file::RsDexFile::File { dex, .. } => self.inner.0.to_string(Some(dex))?,
+        })
     }
 }
 // <<< end python export
@@ -412,7 +439,7 @@ define_flags!(
 impl<'a> Instruction<'a> {
     #[inline(always)]
     const fn format_desc(&self) -> &'static InstructionDescriptor {
-        &Instruction::INSN_DESCRIPTORS[(self.0[0] & 0xFF) as usize]
+        &Instruction::INSN_DESCRIPTORS[(self.0[0] as u8 & 0xFF) as usize]
     }
 
     #[inline(always)]
@@ -469,6 +496,204 @@ impl<'a> Instruction<'a> {
     }
 }
 
+pub(crate) trait ComplexFromInst: Plain + Sized {
+    fn from_inst<'a>(inst: &Instruction<'a>) -> Result<&'a Self> {
+        let size_in_code_units = inst.size_in_code_units();
+        if size_in_code_units >= inst.0.len() {
+            return dex_err!(ComplexInstructionError {
+                opcode: inst.name(),
+                req_size: size_in_code_units,
+                max_size: inst.0.len()
+            });
+        }
+
+        let size_in_bytes = size_in_code_units * 2;
+        let inst_data: &[u8] = &inst.as_bytes()[..size_in_bytes];
+        Ok(match Plain::from_bytes(inst_data) {
+            Ok(payload) => payload,
+            Err(_) => {
+                return dex_err!(ComplexInstructionError {
+                    opcode: inst.name(),
+                    req_size: size_in_code_units,
+                    max_size: inst.0.len()
+                });
+            }
+        })
+    }
+}
+
+// ----------------------------------------------------------------------------
+// Packed Switch
+// ----------------------------------------------------------------------------
+#[repr(C)]
+#[derive(Debug, Clone)]
+pub struct PackedSwitchPayload<'a> {
+    pub ident: u16,
+    pub case_count: u16,
+    pub first_key: i32,
+    pub targets: &'a [i32],
+}
+
+unsafe impl plain::Plain for PackedSwitchPayload<'_> {}
+
+impl ComplexFromInst for PackedSwitchPayload<'_> {}
+
+// >>> begin python export
+#[cfg(feature = "python")]
+#[pyo3::pyclass(name = "PackedSwitchPayload", module = "dexrs._internal.code")]
+pub struct PyDexPackedSwitchPayload {
+    pub ident: u16,
+    pub case_count: u16,
+    pub first_key: i32,
+    pub targets: Vec<i32>,
+}
+
+#[cfg(feature = "python")]
+#[pyo3::pymethods]
+impl PyDexPackedSwitchPayload {
+    #[getter]
+    pub fn targets(&self) -> &[i32] {
+        &self.targets
+    }
+
+    #[getter]
+    pub fn first_key(&self) -> i32 {
+        self.first_key
+    }
+
+    #[getter]
+    pub fn case_count(&self) -> u16 {
+        self.case_count
+    }
+}
+
+#[cfg(feature = "python")]
+impl From<&'_ PackedSwitchPayload<'_>> for PyDexPackedSwitchPayload {
+    fn from(payload: &'_ PackedSwitchPayload) -> PyDexPackedSwitchPayload {
+        PyDexPackedSwitchPayload {
+            ident: payload.ident,
+            case_count: payload.case_count,
+            first_key: payload.first_key,
+            targets: payload.targets.to_vec(),
+        }
+    }
+}
+// <<< end python export
+
+// ----------------------------------------------------------------------------
+// Sparse Switch
+// ----------------------------------------------------------------------------
+#[repr(C)]
+#[derive(Debug, Clone)]
+pub struct SparseSwitchPayload<'a> {
+    pub ident: u16,
+    pub case_count: u16,
+    pub keys_and_targets: &'a [i32],
+}
+
+unsafe impl plain::Plain for SparseSwitchPayload<'_> {}
+
+impl ComplexFromInst for SparseSwitchPayload<'_> {}
+
+// >>> begin python export
+#[cfg(feature = "python")]
+#[pyo3::pyclass(name = "SparseSwitchPayload", module = "dexrs._internal.code")]
+pub struct PyDexSparseSwitchPayload {
+    pub ident: u16,
+    pub case_count: u16,
+    pub keys_and_targets: Vec<i32>,
+}
+
+#[cfg(feature = "python")]
+#[pyo3::pymethods]
+impl PyDexSparseSwitchPayload {
+    #[getter]
+    pub fn keys(&self) -> Vec<i32> {
+        self.keys_and_targets[..self.case_count as usize].to_vec()
+    }
+
+    #[getter]
+    pub fn targets(&self) -> &[i32] {
+        &self.keys_and_targets[self.case_count as usize..]
+    }
+
+    #[getter]
+    pub fn case_count(&self) -> u16 {
+        self.case_count
+    }
+}
+
+#[cfg(feature = "python")]
+impl From<&'_ SparseSwitchPayload<'_>> for PyDexSparseSwitchPayload {
+    fn from(payload: &'_ SparseSwitchPayload<'_>) -> Self {
+        PyDexSparseSwitchPayload {
+            ident: payload.ident,
+            case_count: payload.case_count,
+            keys_and_targets: payload.keys_and_targets.to_vec(),
+        }
+    }
+}
+
+// <<< end python export
+
+// ----------------------------------------------------------------------------
+// Fill Array Data
+// ----------------------------------------------------------------------------
+#[repr(C)]
+#[derive(Debug, Clone)]
+pub struct FillArrayDataPayload<'a> {
+    pub ident: u16,
+    pub element_width: u16,
+    pub element_count: u32,
+    pub data: &'a [u8],
+}
+
+unsafe impl plain::Plain for FillArrayDataPayload<'_> {}
+
+impl ComplexFromInst for FillArrayDataPayload<'_> {}
+
+// >>> begin python export
+#[cfg(feature = "python")]
+#[pyo3::pyclass(name = "FillArrayDataPayload", module = "dexrs._internal.code")]
+pub struct PyDexFillArrayDataPayload {
+    pub ident: u16,
+    pub element_width: u16,
+    pub element_count: u32,
+    pub data: Vec<u8>,
+}
+
+#[cfg(feature = "python")]
+#[pyo3::pymethods]
+impl PyDexFillArrayDataPayload {
+    #[getter]
+    pub fn data(&self) -> Vec<u8> {
+        self.data.clone()
+    }
+
+    #[getter]
+    pub fn element_count(&self) -> u32 {
+        self.element_count
+    }
+
+    #[getter]
+    pub fn element_width(&self) -> u16 {
+        self.element_width
+    }
+}
+
+#[cfg(feature = "python")]
+impl From<&'_ FillArrayDataPayload<'_>> for PyDexFillArrayDataPayload {
+    fn from(payload: &'_ FillArrayDataPayload) -> PyDexFillArrayDataPayload {
+        PyDexFillArrayDataPayload {
+            ident: payload.ident,
+            element_width: payload.element_width,
+            element_count: payload.element_count,
+            data: payload.data.to_vec(),
+        }
+    }
+}
+// <<< end python export
+
 pub struct VarArgs {
     pub count: u8,
     pub arg: Vec<u8>,
@@ -504,6 +729,42 @@ pub mod vreg {
     // B|A|op ...
     fn inst_b(inst: &Instruction<'_>) -> Result<u8> {
         Ok((inst.fetch16(0)? >> 12) as u8)
+    }
+
+    //------------------------------------------------------------------------------
+    // complex instructions
+    //------------------------------------------------------------------------------
+    #[inline]
+    pub fn sparse_switch<'a>(inst: &'a Instruction<'a>) -> Result<&'a SparseSwitchPayload<'a>> {
+        match inst.0[0] {
+            signatures::SparseSwitchSignature => Ok(SparseSwitchPayload::from_inst(inst)?),
+            _ => dex_err!(BadComplexInstructionAccess {
+                opcode: inst.name(),
+                target: std::any::type_name::<SparseSwitchPayload>()
+            }),
+        }
+    }
+
+    #[inline]
+    pub fn packed_switch<'a>(inst: &'a Instruction<'a>) -> Result<&'a PackedSwitchPayload<'a>> {
+        match inst.0[0] {
+            signatures::PackedSwitchSignature => Ok(PackedSwitchPayload::from_inst(inst)?),
+            _ => dex_err!(BadComplexInstructionAccess {
+                opcode: inst.name(),
+                target: std::any::type_name::<PackedSwitchPayload>()
+            }),
+        }
+    }
+
+    #[inline]
+    pub fn array_data<'a>(inst: &'a Instruction<'a>) -> Result<&'a FillArrayDataPayload<'a>> {
+        match inst.0[0] {
+            signatures::ArrayDataSignature => Ok(FillArrayDataPayload::from_inst(inst)?),
+            _ => dex_err!(BadComplexInstructionAccess {
+                opcode: inst.name(),
+                target: std::any::type_name::<FillArrayDataPayload>()
+            }),
+        }
     }
 
     //------------------------------------------------------------------------------
@@ -788,6 +1049,53 @@ pub mod vreg {
         Ok(first_reg..=(first_reg + last_reg - 1))
     }
 }
+
+#[cfg(feature = "python")]
+macro_rules! define_vreg_mod {
+    ({ $($name:ident -> $ret_ty:ty,)* }, {$($name_result:ident -> $py_ret_ty:ty,)*}) => {
+        #[cfg(feature = "python")]
+        #[allow(non_snake_case)]
+        #[pyo3::pymodule(name = "vreg")]
+        mod py_vreg {
+            use super::*;
+            use pyo3::{Py, PyResult, Python};
+
+            $(
+                #[pyo3::pyfunction]
+                pub fn $name<'py>(py: Python<'py>, py_inst: Py<PyDexInstruction>) -> PyResult<$ret_ty> {
+                    let rs_inst = &py_inst.try_borrow(py)?.inner;
+                    Ok(vreg::$name(&rs_inst.as_ref().0))
+                }
+            )*
+
+            $(
+                #[pyo3::pyfunction]
+                pub fn $name_result<'py>(py: Python<'py>, py_inst: Py<PyDexInstruction>) -> PyResult<$py_ret_ty> {
+                    let rs_inst = &py_inst.try_borrow(py)?.inner;
+                    Ok(vreg::$name_result(&rs_inst.as_ref().0)?.into())
+                }
+            )*
+        }
+    };
+}
+
+#[cfg(feature = "python")]
+define_vreg_mod!({
+    has_a -> bool,
+    has_b -> bool,
+    has_c -> bool,
+    has_h -> bool,
+    has_wide_b -> bool,
+}, {
+    A -> i32,
+    B -> i32,
+    C -> i32,
+    H -> i32,
+    wide_b -> u64,
+    array_data -> PyDexFillArrayDataPayload,
+    sparse_switch -> PyDexSparseSwitchPayload,
+    packed_switch -> PyDexPackedSwitchPayload,
+});
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // instruction descriptors
@@ -1126,13 +1434,16 @@ insn_desc_table!(
 #[pyo3::pymodule(name = "code")]
 pub(crate) mod py_code {
     #[pymodule_export]
-    use super::{PyDexCode, PyDexFormat, PyDexIndexType, PyInstruction};
+    use super::{
+        PyDexCode, PyDexFillArrayDataPayload, PyDexFormat, PyDexIndexType, PyDexInstruction,
+        PyDexPackedSwitchPayload, PyDexSparseSwitchPayload,
+    };
 
     #[pymodule_export]
     use crate::file::PyCodeItemAccessor;
 
     // constants
     #[pymodule_export]
-    use super::{py_code_flags, py_flags, py_signatures, py_verify_flags};
+    use super::{py_code_flags, py_flags, py_signatures, py_verify_flags, py_vreg};
 }
 // <<< end python module export

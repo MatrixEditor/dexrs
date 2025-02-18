@@ -74,8 +74,25 @@ macro_rules! rs_struct_fields {
             )*
         }
     };
+    ($py_type:ident, $inner:tt, { $(($name:ident, $rtype:ty),)+ }, $($extra:tt)*) => {
+        #[cfg(feature = "python")]
+        #[pyo3::pymethods]
+        impl $py_type {
+            $(
+            #[getter]
+            pub fn $name(&self) -> $rtype {
+                    self.$inner.0.$name
+                }
+            )+
+
+            $(
+                $extra
+            )*
+        }
+    };
+
 }
 
-pub(crate) use rs_type_wrapper;
-pub(crate) use rs_struct_wrapper;
 pub(crate) use rs_struct_fields;
+pub(crate) use rs_struct_wrapper;
+pub(crate) use rs_type_wrapper;

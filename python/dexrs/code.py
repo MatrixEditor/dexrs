@@ -11,6 +11,7 @@ code_flags = rust_code.code_flags
 verify_flags = rust_code.verify_flags
 flags = rust_code.flags
 signatures = rust_code.signatures
+vreg = rust_code.vreg
 
 __all__ = [
     "CodeItemAccessor",

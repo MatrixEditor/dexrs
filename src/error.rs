@@ -177,6 +177,19 @@ pub enum DexError {
         "Got invalid mUTF8 encoded string that encodes up to {idx} characters with only {len} bytes"
     )]
     MalformedMUTF8Sequence { idx: usize, len: usize },
+
+    #[error("Invalid complex instruction({opcode}): requested length{req_size} exceeds max size of {max_size} in bytecode stream")]
+    ComplexInstructionError {
+        opcode: &'static str,
+        req_size: usize,
+        max_size: usize,
+    },
+
+    #[error("Invalid instruction({opcode}): requested access to complex instruction {target} with non-complex instruction data")]
+    BadComplexInstructionAccess {
+        opcode: &'static str,
+        target: &'static str,
+    },
 }
 
 #[macro_export]

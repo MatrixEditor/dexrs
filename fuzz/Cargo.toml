@@ -14,6 +14,10 @@ plain = "0.2.3"
 [dependencies.dexrs]
 path = ".."
 
+[features]
+default = []
+python = ["dexrs/python"]
+
 [[bin]]
 name = "from_raw_parts"
 path = "fuzz_targets/from_raw_parts.rs"

@@ -368,7 +368,7 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
     }
 
     #[inline(always)]
-    pub fn get_code_item_accessor(&'a self, offset: u32) -> Result<CodeItemAccessor<'a>> {
+    pub fn get_code_item_accessor(&self, offset: u32) -> Result<CodeItemAccessor<'a>> {
         check_lt_result!(offset, self.file_size(), "code item offset");
         let code_item = self.non_null_data_ptr(offset)?;
         CodeItemAccessor::from_code_item(

@@ -509,7 +509,8 @@ macro_rules! define_encoded_value {
             fn from(value: &EncodedValue) -> Self {
                 match value {
                     $(
-                        EncodedValue::$primitive_name(value) => PyDexEncodedValue::$primitive_name { $primitive_py_name: *value },
+                        EncodedValue::$primitive_name(value) =>
+                        PyDexEncodedValue::$primitive_name { $primitive_py_name: *value },
                     )*
                     EncodedValue::Array(v) => PyDexEncodedValue::Array {
                         elements: v.iter().map(Into::into).collect(),
@@ -542,7 +543,6 @@ define_encoded_value!({
     (Enum: index=u32),
     (Boolean: value=bool),
 });
-
 
 // --------------------------------------------------------------------
 // Annotation Element

@@ -11,11 +11,12 @@ use crate::Result;
 use super::{CodeItem, DexContainer, DexFile, Instruction};
 
 #[cfg(feature = "python")]
-use super::{PyDexCodeItem, PyInstruction};
+use super::{PyDexCodeItem, PyDexInstruction};
 
 // ----------------------------------------------------------------------------
 // CodeItemAccessor
 // ----------------------------------------------------------------------------
+#[derive(Debug, Clone)]
 pub struct CodeItemAccessor<'a> {
     code_off: u32,
     code_item: &'a CodeItem,
@@ -45,7 +46,7 @@ impl<'a> CodeItemAccessor<'a> {
 
     #[inline(always)]
     pub fn from_code_item<C>(
-        dex: &'a DexFile<'a, C>,
+        dex: &DexFile<'a, C>,
         code_item: &'a CodeItem,
         code_off: u32,
     ) -> Result<CodeItemAccessor<'a>>
@@ -180,12 +181,12 @@ impl PyCodeItemAccessor {
         self.inner.0.insns()
     }
 
-    pub fn inst_at(&self, pc: u32) -> PyInstruction {
+    pub fn inst_at(&self, pc: u32) -> PyDexInstruction {
         self.inner.0.inst_at(pc).into()
     }
 
     // REVISIT: dex_pc is unused here
-    pub fn insns(&self) -> PyResult<Vec<PyInstruction>> {
+    pub fn insns(&self) -> PyResult<Vec<PyDexInstruction>> {
         Ok(DexInstructionIterator::new(self.inner.0.insns)
             .map(Into::into)
             .collect())

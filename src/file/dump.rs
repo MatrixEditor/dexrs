@@ -87,9 +87,10 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
     }
 
     pub fn pretty_utf16_at(&self, idx: u32) -> String {
-        self.pretty_utf16(&StringId {
-            string_data_off: idx,
-        })
+        match self.get_string_id(idx) {
+            Ok(str_data) => self.pretty_utf16(&str_data),
+            Err(_) => format!("<<invalid-string-idx-{}>>", idx),
+        }
     }
 
     pub fn pretty_method_at(&self, method_idx: u32, opts: prettify::Method) -> String {
@@ -141,7 +142,10 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
 }
 
 impl<'a> Instruction<'a> {
-    pub fn to_string(&self, dex_file: Option<&DexFile<'_>>) -> Result<String> {
+    pub fn to_string<C>(&self, dex_file: Option<&DexFile<'a, C>>) -> Result<String>
+    where
+        C: DexContainer<'a>,
+    {
         let opcode = self.name();
         Ok(match self.format() {
             &Format::k10x => format!("{opcode}"),

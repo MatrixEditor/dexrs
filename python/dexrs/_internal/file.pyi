@@ -12,6 +12,7 @@ from .structs import (
     TypeItem,
 )
 from .class_accessor import ClassAccessor
+from .code import CodeItemAccessor
 
 class VerifyPreset:
     ALL: VerifyPreset
@@ -81,3 +82,4 @@ class DexFile:
 
     # class data
     def get_class_accessor(self, class_def: ClassDef) -> Optional[ClassAccessor]: ...
+    def get_code_item_accessor(self, code_off: int) -> CodeItemAccessor: ...

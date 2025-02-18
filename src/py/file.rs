@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use pyo3::{exceptions::PyValueError, Py, PyResult, Python};
 
+use crate::file::PyCodeItemAccessor;
 use crate::file::{
     verifier::VerifyPreset, DexFile, DexLocation, FieldIndex, ProtoIndex, PyDexClassDef,
     PyDexFieldId, PyDexHeader, PyDexMethodId, PyDexProtoId, PyDexStringId, PyDexTypeId,
@@ -49,7 +50,7 @@ pub enum RsDexFile {
 // Python wrapper class that enables mutli-threading operations
 #[pyo3::pyclass(name = "DexFile", module = "dexrs._internal.file")]
 pub struct PyDexFileImpl {
-    inner: Arc<RsDexFile>,
+    pub(crate) inner: Arc<RsDexFile>,
 }
 
 macro_rules! bind_dex {
@@ -371,6 +372,17 @@ impl PyDexFileImpl {
     ) -> PyResult<Option<PyClassAccessor>> {
         let class_def = &py_class_def.try_borrow(py)?.0;
         Ok(dex_action_impl!(self, get_class_accessor?, class_def, py).map(Into::into))
+    }
+
+    // ----------------------------------------------------------------------------
+    // code item accessor
+    // ----------------------------------------------------------------------------
+    pub fn get_code_item_accessor<'py>(
+        &self,
+        py: Python<'py>,
+        code_offset: u32,
+    ) -> PyResult<PyCodeItemAccessor> {
+        Ok(dex_action_impl!(self, get_code_item_accessor?, code_offset, py).into())
     }
 
     // ----------------------------------------------------------------------------

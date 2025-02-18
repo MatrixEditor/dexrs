@@ -1,6 +1,7 @@
-from typing import List
+from typing import List, Optional
 
 from ..structs import CodeItem
+from ..file import DexFile
 
 class CodeItemAccessor:
     code_off: int
@@ -49,6 +50,22 @@ class Instruction:
     def get_flags_of(inst_data: int) -> int: ...
     @staticmethod
     def get_index_type_of(inst_data: int) -> IndexType: ...
+    def to_string(self, dex_file: Optional[DexFile] = ...) -> str: ...
+
+class FillArrayDataPayload:
+    data: bytes
+    element_count: int
+    element_size: int
+
+class SparseSwitchPayload:
+    keys: List[int]
+    targets: List[int]
+    case_count: int
+
+class PackedSwitchPayload:
+    first_key: List[int]
+    targets: List[int]
+    case_count: int
 
 class Format:
     k10x: Format
