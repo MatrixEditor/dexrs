@@ -5,7 +5,8 @@ use crate::{
 };
 
 use super::{
-    vreg, Code, DexContainer, DexFile, FieldId, Format, Instruction, MethodId, StringId, TypeId,
+    signatures, vreg, Code, DexContainer, DexFile, FieldId, Format, Instruction, MethodId,
+    StringId, TypeId,
 };
 
 pub mod prettify {
@@ -147,6 +148,16 @@ impl<'a> Instruction<'a> {
         C: DexContainer<'a>,
     {
         let opcode = self.name();
+        if self.opcode() == Code::NOP {
+            return Ok((match self.fetch16(0)? {
+                signatures::ArrayDataSignature => "array-data",
+                signatures::PackedSwitchSignature => "packed-switch",
+                signatures::SparseSwitchSignature => "sparse-switch",
+                _ => opcode,
+            })
+            .to_string());
+        }
+
         Ok(match self.format() {
             &Format::k10x => format!("{opcode}"),
             Format::k12x => format!("{opcode} v{}, v{}", vreg::A(self)?, vreg::B(self)?),
