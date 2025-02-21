@@ -557,20 +557,56 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
     //------------------------------------------------------------------------------
     // TryItem
     //------------------------------------------------------------------------------
-    pub fn get_try_item(&'a self, ca: &CodeItemAccessor<'_>) -> Result<&'a [TryItem]> {
-        let offset = (ca.code_off() as usize)
-            + std::mem::size_of::<CodeItem>()
-            + ca.insns_size_in_code_units() as usize;
-        // must be 4-byte aligned
-        let offset = (offset + 3) & !3;
-        check_lt_result!(offset, self.file_size(), TryItem);
-        self.get_try_items_raw(offset as u32, ca.tries_size() as u16)
+    pub fn get_try_items(&'a self, ca: &CodeItemAccessor<'_>) -> Result<&'a [TryItem]> {
+        // skip heavy work if there are no try items
+        match ca.get_tries_off() {
+            None => return Ok(&[]),
+            Some(tries_off) => {
+                check_lt_result!(tries_off, self.file_size(), TryItem);
+                self.get_try_items_raw(tries_off as u32, ca.tries_size() as u16)
+            }
+        }
     }
 
     #[inline]
     pub fn get_try_items_raw(&'a self, tries_off: u32, tries_size: u16) -> Result<&'a [TryItem]> {
         check_lt_result!(tries_off, self.file_size(), TryItem);
         self.non_null_array_data_ptr(tries_off, tries_size as usize)
+    }
+
+    //------------------------------------------------------------------------------
+    // EncodedCatchHandler
+    //------------------------------------------------------------------------------
+    #[inline]
+    pub fn get_catch_handler_data(
+        &self,
+        ca: &CodeItemAccessor<'_>,
+        offset: usize,
+    ) -> Result<&'a [u8]> {
+        let data_offset = ca.get_catch_handler_data_off();
+        check_lt_result!(data_offset + offset, self.file_size(), CatchHandlerData);
+
+        // TODO: handle values greater than u16 since u16::MAX is maximum offset
+        Ok(&self.mmap[data_offset + offset..])
+    }
+
+    #[inline]
+    pub fn iter_catch_handlers_at(
+        &self,
+        ca: &CodeItemAccessor<'_>,
+        offset: usize,
+    ) -> Result<EncodedCatchHandlerIterator<'_>> {
+        let data = self.get_catch_handler_data(ca, offset)?;
+        EncodedCatchHandlerIterator::new(&data)
+    }
+
+    #[inline]
+    pub fn iter_catch_handlers(
+        &self,
+        ca: &CodeItemAccessor<'_>,
+        try_item: &TryItem,
+    ) -> Result<EncodedCatchHandlerIterator<'_>> {
+        self.iter_catch_handlers_at(ca, try_item.handler_off as usize)
     }
 
     //------------------------------------------------------------------------------

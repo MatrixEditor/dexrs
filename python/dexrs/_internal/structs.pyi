@@ -76,6 +76,12 @@ class TryItem:
     insn_count: int
     handler_off: int
 
+class CatchHandlerData:
+    type_idx: int
+    address: int
+
+    def is_catch_all(self) -> bool: ...
+
 class AnnotationsDirectoryItem:
     class_annotations_off: int
     fields_size: int

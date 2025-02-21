@@ -3,7 +3,6 @@
 use dexrs::file::dump::prettify;
 use dexrs::file::DexFile;
 use dexrs::Result;
-use openssl::string;
 
 fn dex_get_method(dex: &DexFile<'_>) -> Result<()> {
     // the DexFile struct does not provide an interface to query all

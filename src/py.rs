@@ -3,12 +3,12 @@ pub(crate) mod file;
 macro_rules! rs_type_wrapper {
     ($src_type:ty, $py_type:ident, $rs_type:ident, name: $name:literal, module: $module:literal) => {
         #[cfg(feature = "python")]
-        pub struct $rs_type($src_type);
+        pub struct $rs_type(pub(crate) $src_type);
 
         #[cfg(feature = "python")]
         #[pyo3::pyclass(name = $name, module = $module)]
         pub struct $py_type {
-            inner: Arc<$rs_type>,
+            pub(crate) inner: Arc<$rs_type>,
         }
 
         #[cfg(feature = "python")]
@@ -52,6 +52,13 @@ macro_rules! rs_struct_wrapper {
         impl<'a> From<&'a $rust_type> for $py_type {
             fn from(value: &'a $rust_type) -> Self {
                 $py_type(Arc::new(value.clone()))
+            }
+        }
+
+        #[cfg(feature = "python")]
+        impl From<$rust_type> for $py_type {
+            fn from(value: $rust_type) -> Self {
+                $py_type(Arc::new(value))
             }
         }
     };

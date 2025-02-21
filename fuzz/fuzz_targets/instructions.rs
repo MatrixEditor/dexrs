@@ -4,10 +4,7 @@
 #![no_main]
 #![allow(non_snake_case)]
 
-use dexrs::file::{
-    ComplexFromInst, DexInstructionIterator, FillArrayDataPayload, Instruction,
-    PackedSwitchPayload, SparseSwitchPayload,
-};
+use dexrs::file::{vreg, DexInstructionIterator, Instruction};
 
 extern crate dexrs;
 extern crate libfuzzer_sys;
@@ -18,7 +15,7 @@ libfuzzer_sys::fuzz_target!(|data: &[u8]| {
         // Two aspects
         let iter = DexInstructionIterator::new(bytes);
         for inst in iter {
-            if let Ok(inst_dump) = inst.to_string(None) {
+            if let Ok(inst_dump) = inst.to_string::<&[u8]>(None) {
                 assert!(inst_dump.len() > 0);
             }
         }
@@ -28,13 +25,13 @@ libfuzzer_sys::fuzz_target!(|data: &[u8]| {
         if bytes.len() >= 1 {
             let inst = Instruction::at(bytes);
             // these parsing methods MUST withstand random data
-            if let Ok(payload) = PackedSwitchPayload::from_inst(&inst) {
+            if let Ok(payload) = vreg::packed_switch(&inst) {
                 let _ = payload;
             }
-            if let Ok(payload) = SparseSwitchPayload::from_inst(&inst) {
+            if let Ok(payload) = vreg::sparse_switch(&inst) {
                 let _ = payload;
             }
-            if let Ok(payload) = FillArrayDataPayload::from_inst(&inst) {
+            if let Ok(payload) = vreg::array_data(&inst) {
                 let _ = payload;
             }
         }

@@ -2,12 +2,12 @@ use std::sync::Arc;
 
 use pyo3::{exceptions::PyValueError, Py, PyResult, Python};
 
-use crate::file::PyCodeItemAccessor;
 use crate::file::{
     verifier::VerifyPreset, DexFile, DexLocation, FieldIndex, ProtoIndex, PyDexClassDef,
     PyDexFieldId, PyDexHeader, PyDexMethodId, PyDexProtoId, PyDexStringId, PyDexTypeId,
     PyDexTypeItem, PyFileDexContainer, PyInMemoryDexContainer, StringIndex, TypeIndex,
 };
+use crate::file::{PyCodeItemAccessor, PyDexCatchHandlerData, PyDexTryItem};
 
 use crate::file::class_accessor::PyClassAccessor;
 
@@ -94,15 +94,15 @@ macro_rules! dex_action_impl {
             }
         }
     }};
-    ($this:ident, $method:ident?, $arg:expr, $py:ident) => {{
+    ($this:ident, $method:ident($($args:tt)*)?, $py:ident) => {{
         match &$this.inner.as_ref() {
             RsDexFile::InMemory { dex, container } => {
                 dex_container_check!(container, $py, $method);
-                dex.$method($arg)?
+                dex.$method($($args)*)?
             }
             RsDexFile::File { dex, container } => {
                 dex_container_check!(container, $py, $method);
-                dex.$method($arg)?
+                dex.$method($($args)*)?
             }
         }
     }};
@@ -181,7 +181,7 @@ impl PyDexFileImpl {
         py: Python<'py>,
         index: StringIndex,
     ) -> PyResult<PyDexStringId> {
-        Ok(dex_action_impl!(self, get_string_id?, index, py).into())
+        Ok(dex_action_impl!(self, get_string_id(index)?, py).into())
     }
 
     pub fn get_string_id_opt<'py>(
@@ -189,7 +189,7 @@ impl PyDexFileImpl {
         py: Python<'py>,
         index: StringIndex,
     ) -> PyResult<Option<PyDexStringId>> {
-        Ok(dex_action_impl!(self, get_string_id_opt?, index, py).map(Into::into))
+        Ok(dex_action_impl!(self, get_string_id_opt(index)?, py).map(Into::into))
     }
 
     pub fn num_string_ids<'py>(&self, py: Python<'py>) -> PyResult<u32> {
@@ -200,7 +200,7 @@ impl PyDexFileImpl {
     // Type Ids
     // ----------------------------------------------------------------------------
     pub fn get_type_id<'py>(&self, py: Python<'py>, index: TypeIndex) -> PyResult<PyDexTypeId> {
-        Ok(dex_action_impl!(self, get_type_id?, index, py).into())
+        Ok(dex_action_impl!(self, get_type_id(index)?, py).into())
     }
 
     pub fn get_type_id_opt<'py>(
@@ -208,7 +208,7 @@ impl PyDexFileImpl {
         py: Python<'py>,
         index: TypeIndex,
     ) -> PyResult<Option<PyDexTypeId>> {
-        Ok(dex_action_impl!(self, get_type_id_opt?, index, py).map(Into::into))
+        Ok(dex_action_impl!(self, get_type_id_opt(index)?, py).map(Into::into))
     }
 
     pub fn num_type_ids<'py>(&self, py: Python<'py>) -> PyResult<u32> {
@@ -218,34 +218,30 @@ impl PyDexFileImpl {
     pub fn get_type_desc<'py>(
         &self,
         py: Python<'py>,
-        py_type_id: Py<PyDexTypeId>,
+        type_id: Py<PyDexTypeId>,
     ) -> PyResult<String> {
-        let type_id = &py_type_id.try_borrow(py)?.0;
-        Ok(dex_action_impl!(self, get_type_desc_utf16?, type_id, py))
+        let rs_type_id = &type_id.try_borrow(py)?.0;
+        Ok(dex_action_impl!(self, get_type_desc_utf16(rs_type_id)?, py))
     }
 
     pub fn get_type_desc_at<'py>(&self, py: Python<'py>, index: TypeIndex) -> PyResult<String> {
-        Ok(dex_action_impl!(self, get_type_desc_utf16_at?, index, py))
+        Ok(dex_action_impl!(self, get_type_desc_utf16_at(index)?, py))
     }
 
     pub fn pretty_type_at<'py>(&self, py: Python<'py>, index: TypeIndex) -> PyResult<String> {
         Ok(dex_action_impl!(self, pretty_type_at, index, py))
     }
 
-    pub fn pretty_type<'py>(
-        &self,
-        py: Python<'py>,
-        py_type_id: Py<PyDexTypeId>,
-    ) -> PyResult<String> {
-        let type_id = &py_type_id.try_borrow(py)?.0;
-        Ok(dex_action_impl!(self, pretty_type, type_id, py))
+    pub fn pretty_type<'py>(&self, py: Python<'py>, type_id: Py<PyDexTypeId>) -> PyResult<String> {
+        let rs_type_id = &type_id.try_borrow(py)?.0;
+        Ok(dex_action_impl!(self, pretty_type, rs_type_id, py))
     }
 
     // ----------------------------------------------------------------------------
     // Field Ids
     // ----------------------------------------------------------------------------
     pub fn get_field_id<'py>(&self, py: Python<'py>, index: FieldIndex) -> PyResult<PyDexFieldId> {
-        Ok(dex_action_impl!(self, get_field_id?, index, py).into())
+        Ok(dex_action_impl!(self, get_field_id(index)?, py).into())
     }
 
     pub fn get_field_id_opt<'py>(
@@ -253,7 +249,7 @@ impl PyDexFileImpl {
         py: Python<'py>,
         index: FieldIndex,
     ) -> PyResult<Option<PyDexFieldId>> {
-        Ok(dex_action_impl!(self, get_field_id_opt?, index, py).map(Into::into))
+        Ok(dex_action_impl!(self, get_field_id_opt(index)?, py).map(Into::into))
     }
 
     pub fn num_field_ids<'py>(&self, py: Python<'py>) -> PyResult<u32> {
@@ -263,21 +259,21 @@ impl PyDexFileImpl {
     pub fn get_field_name<'py>(
         &self,
         py: Python<'py>,
-        py_field_id: Py<PyDexFieldId>,
+        field_id: Py<PyDexFieldId>,
     ) -> PyResult<String> {
-        let field_id = &py_field_id.try_borrow(py)?.0;
-        Ok(dex_action_impl!(self, get_field_name?, field_id, py))
+        let rs_field_id = &field_id.try_borrow(py)?.0;
+        Ok(dex_action_impl!(self, get_field_name(rs_field_id)?, py))
     }
 
     pub fn get_field_name_at<'py>(&self, py: Python<'py>, index: FieldIndex) -> PyResult<String> {
-        Ok(dex_action_impl!(self, get_field_name_at?, index, py))
+        Ok(dex_action_impl!(self, get_field_name_at(index)?, py))
     }
 
     // ----------------------------------------------------------------------------
     // Proto Ids
     // ----------------------------------------------------------------------------
     pub fn get_proto_id<'py>(&self, py: Python<'py>, index: ProtoIndex) -> PyResult<PyDexProtoId> {
-        Ok(dex_action_impl!(self, get_proto_id?, index, py).into())
+        Ok(dex_action_impl!(self, get_proto_id(index)?, py).into())
     }
 
     pub fn get_proto_id_opt<'py>(
@@ -285,31 +281,27 @@ impl PyDexFileImpl {
         py: Python<'py>,
         index: ProtoIndex,
     ) -> PyResult<Option<PyDexProtoId>> {
-        Ok(dex_action_impl!(self, get_proto_id_opt?, index, py).map(Into::into))
+        Ok(dex_action_impl!(self, get_proto_id_opt(index)?, py).map(Into::into))
     }
 
     pub fn num_proto_ids<'py>(&self, py: Python<'py>) -> PyResult<u32> {
         Ok(dex_action_impl!(self, num_proto_ids, py))
     }
 
-    pub fn get_shorty<'py>(
-        &self,
-        py: Python<'py>,
-        py_proto_id: Py<PyDexProtoId>,
-    ) -> PyResult<String> {
-        let proto_id = &py_proto_id.try_borrow(py)?.0;
-        Ok(dex_action_impl!(self, get_shorty?, proto_id, py))
+    pub fn get_shorty<'py>(&self, py: Python<'py>, proto_id: Py<PyDexProtoId>) -> PyResult<String> {
+        let rs_proto_id = &proto_id.try_borrow(py)?.0;
+        Ok(dex_action_impl!(self, get_shorty(rs_proto_id)?, py))
     }
 
     pub fn get_shorty_at<'py>(&self, py: Python<'py>, index: ProtoIndex) -> PyResult<String> {
-        Ok(dex_action_impl!(self, get_shorty_at?, index, py))
+        Ok(dex_action_impl!(self, get_shorty_at(index)?, py))
     }
 
     // ----------------------------------------------------------------------------
     // method ids
     // ----------------------------------------------------------------------------
     pub fn get_method_id<'py>(&self, py: Python<'py>, index: u32) -> PyResult<PyDexMethodId> {
-        Ok(dex_action_impl!(self, get_method_id?, index, py).into())
+        Ok(dex_action_impl!(self, get_method_id(index)?, py).into())
     }
 
     pub fn get_method_id_opt<'py>(
@@ -317,7 +309,7 @@ impl PyDexFileImpl {
         py: Python<'py>,
         index: u32,
     ) -> PyResult<Option<PyDexMethodId>> {
-        Ok(dex_action_impl!(self, get_method_id_opt?, index, py).map(Into::into))
+        Ok(dex_action_impl!(self, get_method_id_opt(index)?, py).map(Into::into))
     }
 
     pub fn num_method_ids<'py>(&self, py: Python<'py>) -> PyResult<u32> {
@@ -328,7 +320,7 @@ impl PyDexFileImpl {
     // ClassDefs
     //------------------------------------------------------------------------------
     pub fn get_class_def<'py>(&self, py: Python<'py>, index: u32) -> PyResult<PyDexClassDef> {
-        Ok(dex_action_impl!(self, get_class_def?, index, py).into())
+        Ok(dex_action_impl!(self, get_class_def(index)?, py).into())
     }
 
     pub fn get_class_def_opt<'py>(
@@ -336,7 +328,7 @@ impl PyDexFileImpl {
         py: Python<'py>,
         index: u32,
     ) -> PyResult<Option<PyDexClassDef>> {
-        Ok(dex_action_impl!(self, get_class_def_opt?, index, py).map(Into::into))
+        Ok(dex_action_impl!(self, get_class_def_opt(index)?, py).map(Into::into))
     }
 
     pub fn num_class_defs<'py>(&self, py: Python<'py>) -> PyResult<u32> {
@@ -346,20 +338,26 @@ impl PyDexFileImpl {
     pub fn get_class_desc<'py>(
         &self,
         py: Python<'py>,
-        py_class_def: Py<PyDexClassDef>,
+        class_def: Py<PyDexClassDef>,
     ) -> PyResult<String> {
-        let class_def = &py_class_def.try_borrow(py)?.0;
-        Ok(dex_action_impl!(self, get_class_desc_utf16?, class_def, py))
+        let rs_class_def = &class_def.try_borrow(py)?.0;
+        Ok(dex_action_impl!(
+            self,
+            get_class_desc_utf16(rs_class_def)?,
+            py
+        ))
     }
 
     pub fn get_interfaces_list<'py>(
         &self,
         py: Python<'py>,
-        py_class_def: Py<PyDexClassDef>,
+        class_def: Py<PyDexClassDef>,
     ) -> PyResult<Option<Vec<PyDexTypeItem>>> {
-        let class_def = &py_class_def.try_borrow(py)?.0;
-        Ok(dex_action_impl!(self, get_interfaces_list?, class_def, py)
-            .map(|x| x.iter().map(Into::into).collect()))
+        let rs_class_def = &class_def.try_borrow(py)?.0;
+        Ok(
+            dex_action_impl!(self, get_interfaces_list(rs_class_def)?, py)
+                .map(|x| x.iter().map(Into::into).collect()),
+        )
     }
 
     // ----------------------------------------------------------------------------
@@ -368,10 +366,10 @@ impl PyDexFileImpl {
     pub fn get_class_accessor<'py>(
         &self,
         py: Python<'py>,
-        py_class_def: Py<PyDexClassDef>,
+        class_def: Py<PyDexClassDef>,
     ) -> PyResult<Option<PyClassAccessor>> {
-        let class_def = &py_class_def.try_borrow(py)?.0;
-        Ok(dex_action_impl!(self, get_class_accessor?, class_def, py).map(Into::into))
+        let rs_class_def = &class_def.try_borrow(py)?.0;
+        Ok(dex_action_impl!(self, get_class_accessor(rs_class_def)?, py).map(Into::into))
     }
 
     // ----------------------------------------------------------------------------
@@ -382,14 +380,69 @@ impl PyDexFileImpl {
         py: Python<'py>,
         code_offset: u32,
     ) -> PyResult<PyCodeItemAccessor> {
-        Ok(dex_action_impl!(self, get_code_item_accessor?, code_offset, py).into())
+        Ok(dex_action_impl!(self, get_code_item_accessor(code_offset)?, py).into())
+    }
+
+    //------------------------------------------------------------------------------
+    // TryItem
+    //------------------------------------------------------------------------------
+    pub fn get_try_items<'py>(
+        &self,
+        py: Python<'py>,
+        ca: Py<PyCodeItemAccessor>,
+    ) -> PyResult<Vec<PyDexTryItem>> {
+        let code_item_accessor = &ca.try_borrow(py)?.inner.0;
+        Ok(
+            dex_action_impl!(self, get_try_items(code_item_accessor)?, py)
+                .into_iter()
+                .map(Into::into)
+                .collect::<Vec<PyDexTryItem>>(),
+        )
+    }
+
+    //------------------------------------------------------------------------------
+    // Encoded Catch Handlers
+    //------------------------------------------------------------------------------
+    pub fn get_catch_handlers<'py>(
+        &self,
+        py: Python<'py>,
+        ca: Py<PyCodeItemAccessor>,
+        try_item: Py<PyDexTryItem>,
+    ) -> PyResult<Vec<PyDexCatchHandlerData>> {
+        let code_item_accessor = &ca.try_borrow(py)?.inner.0;
+        let rs_try_item = &try_item.try_borrow(py)?.0;
+        Ok(dex_action_impl!(
+            self,
+            iter_catch_handlers(code_item_accessor, rs_try_item)?,
+            py
+        )
+        .into_iter()
+        .map(Into::into)
+        .collect::<Vec<PyDexCatchHandlerData>>())
+    }
+
+    pub fn get_catch_handlers_at<'py>(
+        &self,
+        py: Python<'py>,
+        ca: Py<PyCodeItemAccessor>,
+        offset: u32,
+    ) -> PyResult<Vec<PyDexCatchHandlerData>> {
+        let code_item_accessor = &ca.try_borrow(py)?.inner.0;
+        Ok(dex_action_impl!(
+            self,
+            iter_catch_handlers_at(code_item_accessor, offset as usize)?,
+            py
+        )
+        .into_iter()
+        .map(Into::into)
+        .collect::<Vec<PyDexCatchHandlerData>>())
     }
 
     // ----------------------------------------------------------------------------
     // string data
     // ----------------------------------------------------------------------------
     pub fn get_utf16_at<'py>(&self, py: Python<'py>, index: StringIndex) -> PyResult<String> {
-        Ok(dex_action_impl!(self, get_utf16_str_at?, index, py))
+        Ok(dex_action_impl!(self, get_utf16_str_at(index)?, py))
     }
 
     pub fn get_utf16<'py>(
@@ -398,7 +451,7 @@ impl PyDexFileImpl {
         py_string_id: Py<PyDexStringId>,
     ) -> PyResult<String> {
         let string_id = &py_string_id.try_borrow(py)?.0;
-        Ok(dex_action_impl!(self, get_utf16_str?, &string_id, py))
+        Ok(dex_action_impl!(self, get_utf16_str(string_id)?, py))
     }
 
     pub fn get_utf16_opt_at<'py>(
@@ -406,11 +459,11 @@ impl PyDexFileImpl {
         py: Python<'py>,
         index: StringIndex,
     ) -> PyResult<Option<String>> {
-        Ok(dex_action_impl!(self, get_utf16_str_opt_at?, index, py))
+        Ok(dex_action_impl!(self, get_utf16_str_opt_at(index)?, py))
     }
 
     pub fn get_utf16_lossy_at<'py>(&self, py: Python<'py>, index: StringIndex) -> PyResult<String> {
-        Ok(dex_action_impl!(self, get_utf16_str_lossy_at?, index, py))
+        Ok(dex_action_impl!(self, get_utf16_str_lossy_at(index)?, py))
     }
 
     pub fn get_utf16_lossy<'py>(
@@ -419,7 +472,7 @@ impl PyDexFileImpl {
         py_string_id: Py<PyDexStringId>,
     ) -> PyResult<String> {
         let string_id = &py_string_id.try_borrow(py)?.0;
-        Ok(dex_action_impl!(self, get_utf16_str_lossy?, &string_id, py))
+        Ok(dex_action_impl!(self, get_utf16_str_lossy(string_id)?, py))
     }
 
     pub fn get_string_data<'py>(
@@ -428,7 +481,7 @@ impl PyDexFileImpl {
         py_string_id: Py<PyDexStringId>,
     ) -> PyResult<(u32, &'py [u8])> {
         let string_id = &py_string_id.try_borrow(py)?.0;
-        Ok(dex_action_impl!(self, get_string_data?, &string_id, py))
+        Ok(dex_action_impl!(self, get_string_data(string_id)?, py))
     }
 
     // unsafe string API

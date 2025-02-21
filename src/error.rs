@@ -90,6 +90,9 @@ pub enum DexError {
     #[error("Failed to parse varint: {0}")]
     VarIntError(#[from] varint_simd::VarIntDecodeError),
 
+    #[error("Failed to parse signed varint: {0}")]
+    SignedVarIntError(#[from] leb128fmt::Error),
+
     #[error("Bad string data({offset}) contains invalid LEB128({kind:?}) which can't be converted to a valid u32")]
     BadStringData {
         offset: usize,

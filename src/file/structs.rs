@@ -360,6 +360,33 @@ rs_struct_fields!(PyDexTryItem, {
 },);
 // <<< end python export
 
+// ----------------------------------------------------------------------------
+// CatchHandler Item
+// ----------------------------------------------------------------------------
+#[derive(Debug, Clone, Default)]
+pub struct CatchHandlerData {
+    pub type_idx: TypeIndex,
+    pub address: u32,
+    pub is_catch_all: bool,
+}
+
+// >>> begin python export
+#[cfg(feature = "python")]
+rs_struct_wrapper!("CatchHandlerData", PyDexCatchHandlerData, CatchHandlerData);
+
+#[cfg(feature = "python")]
+rs_struct_fields!(PyDexCatchHandlerData, {
+    (type_idx, TypeIndex),
+    (address, u32),
+},
+
+fn is_catch_all(&self) -> bool {
+    self.0.is_catch_all
+}
+
+);
+// <<< end python export
+
 // --------------------------------------------------------------------
 // AnnotationsDirectoryItem
 // --------------------------------------------------------------------
@@ -637,10 +664,11 @@ pub(crate) mod py_structs {
     #[pymodule_export]
     use super::{
         PyDexAnnotationElement, PyDexAnnotationItem, PyDexAnnotationsDirectoryItem,
-        PyDexCallSiteIdItem, PyDexClassDef, PyDexCodeItem, PyDexEncodedAnnotation,
-        PyDexEncodedValue, PyDexFieldAnnotationsItem, PyDexFieldId, PyDexMethodAnnotationsItem,
-        PyDexMethodHandleItem, PyDexMethodId, PyDexParameterAnnotationsItem, PyDexProtoId,
-        PyDexStringId, PyDexTryItem, PyDexTypeId, PyDexTypeItem,
+        PyDexCallSiteIdItem, PyDexCatchHandlerData, PyDexClassDef, PyDexCodeItem,
+        PyDexEncodedAnnotation, PyDexEncodedValue, PyDexFieldAnnotationsItem, PyDexFieldId,
+        PyDexMethodAnnotationsItem, PyDexMethodHandleItem, PyDexMethodId,
+        PyDexParameterAnnotationsItem, PyDexProtoId, PyDexStringId, PyDexTryItem, PyDexTypeId,
+        PyDexTypeItem,
     };
 
     #[pymodule_export]

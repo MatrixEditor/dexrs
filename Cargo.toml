@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 adler32 = "1.2.0"
+leb128fmt = "0.1.0"
 memmap2 = "0.9.5"
 openssl = "0.10.64"
 plain = "0.2.3"

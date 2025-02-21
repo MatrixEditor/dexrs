@@ -52,3 +52,11 @@ path = "fuzz_targets/mutf8.rs"
 test = false
 doc = false
 bench = false
+
+
+[[bin]]
+name = "code_item"
+path = "fuzz_targets/code_item.rs"
+test = false
+doc = false
+bench = false

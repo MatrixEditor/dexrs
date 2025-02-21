@@ -6,9 +6,9 @@ use std::sync::Arc;
 #[cfg(feature = "python")]
 use crate::py::rs_type_wrapper;
 
-use crate::Result;
+use crate::{leb128, Result};
 
-use super::{CodeItem, DexContainer, DexFile, Instruction};
+use super::{CatchHandlerData, CodeItem, DexContainer, DexFile, Instruction, TryItem, TypeIndex};
 
 #[cfg(feature = "python")]
 use super::{PyDexCodeItem, PyDexInstruction};
@@ -37,6 +37,29 @@ impl<'a> CodeItemAccessor<'a> {
     #[inline(always)]
     pub fn insns(&self) -> &'a [u16] {
         self.insns
+    }
+
+    #[inline]
+    pub fn get_tries_off(&self) -> Option<usize> {
+        if self.tries_size() == 0 {
+            return None; //
+        }
+
+        let offset = (self.code_off() as usize)
+            + std::mem::size_of::<CodeItem>()
+            + self.insns_size_in_code_units() as usize;
+        // must be 4-byte aligned
+        let offset = (offset + 3) & !3;
+        Some(offset)
+    }
+
+    #[inline]
+    pub fn get_catch_handler_data_off(&self) -> usize {
+        let tries_off = self.code_off() as usize
+            + std::mem::size_of::<CodeItem>()
+            + self.insns_size_in_code_units() as usize;
+
+        tries_off + (self.tries_size() as usize * std::mem::size_of::<TryItem>())
     }
 
     #[inline]
@@ -242,5 +265,71 @@ impl<'a> Iterator for DexInstructionIterator<'a> {
         } else {
             None
         }
+    }
+}
+
+// ----------------------------------------------------------------------------
+// EncodedCatchHandler Iterator
+// ----------------------------------------------------------------------------
+
+pub struct EncodedCatchHandlerIterator<'a> {
+    data: &'a [u8],
+    offset: usize,
+    catch_all: bool,
+    remaining: i32,
+}
+
+impl<'a> EncodedCatchHandlerIterator<'a> {
+    pub fn new(data: &'a [u8]) -> Result<Self> {
+        let mut pos = 0;
+        let remaining = leb128::decode_sleb128(&data, &mut pos)?;
+        Ok(Self {
+            data,
+            offset: pos,
+            catch_all: remaining <= 0,
+            remaining: if remaining <= 0 {
+                remaining
+            } else {
+                -remaining
+            },
+        })
+    }
+}
+
+impl<'a> Iterator for EncodedCatchHandlerIterator<'a> {
+    type Item = CatchHandlerData;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.remaining == -1 {
+            return None;
+        }
+
+        let mut handler = CatchHandlerData::default();
+        if self.remaining > 0 {
+            match leb128::decode_leb128_off::<u32>(&self.data, &mut self.offset) {
+                Ok(v) => handler.type_idx = v as TypeIndex,
+                Err(_) => return None,
+            };
+            match leb128::decode_leb128_off::<u32>(&self.data, &mut self.offset) {
+                Ok(v) => handler.address = v,
+                Err(_) => return None,
+            }
+            self.remaining -= 1;
+            return Some(handler);
+        }
+
+        if self.catch_all {
+            handler.is_catch_all = true;
+            handler.type_idx = TypeIndex::MAX;
+            match leb128::decode_leb128_off::<u32>(&self.data, &mut self.offset) {
+                Ok(v) => handler.address = v,
+                Err(_) => return None,
+            }
+            self.catch_all = false;
+            return Some(handler);
+        }
+
+        self.remaining = -1;
+        None
     }
 }

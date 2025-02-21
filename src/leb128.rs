@@ -1,4 +1,5 @@
-use varint_simd;
+use varint_simd; // encode/decode unsigned
+use leb128fmt; // encode/decode signed
 
 use crate::Result;
 
@@ -12,16 +13,6 @@ pub fn decode_leb128<T: varint_simd::VarIntTarget>(data_in: &[u8]) -> Result<(T,
 pub fn decode_leb128p1(data_in: &[u8]) -> Result<(i32, usize)> {
     let (result, size) = decode_leb128::<u32>(data_in)?;
     Ok((result as i32 - 1, size))
-}
-
-#[inline(always)]
-pub fn decode_leb128_adv<T: varint_simd::VarIntTarget>(
-    data_in: &[u8],
-    ptr_pos: &mut usize,
-) -> Result<T> {
-    let (value, size) = decode_leb128(data_in)?;
-    *ptr_pos += size;
-    Ok(value)
 }
 
 #[inline(always)]
@@ -41,6 +32,11 @@ pub fn decode_leb128p1_off(data_in: &[u8], ptr_pos: &mut usize) -> Result<i32> {
     Ok(value)
 }
 
+#[inline(always)]
+pub fn decode_sleb128(data_in: &[u8], ptr_pos: &mut usize) -> Result<i32> {
+    Ok(leb128fmt::decode_sint_slice::<i32, 32>(data_in, ptr_pos)?)
+}
+
 // python exports
 #[cfg(feature = "python")]
 #[pyo3::pymodule(name = "leb128")]
@@ -48,8 +44,13 @@ pub(crate) mod py_leb128 {
     use pyo3::PyResult;
 
     #[pyo3::pyfunction]
-    pub fn decode_leb128(data_in: &[u8]) -> PyResult<(u32, usize)> {
+    pub fn decode_uleb128(data_in: &[u8]) -> PyResult<(u32, usize)> {
         Ok(super::decode_leb128::<u32>(data_in)?)
+    }
+
+    #[pyo3::pyfunction]
+    pub fn decode_sleb128(data_in: &[u8]) -> PyResult<i32> {
+        Ok(super::decode_sleb128(data_in, &mut 0)?)
     }
 
     #[pyo3::pyfunction]

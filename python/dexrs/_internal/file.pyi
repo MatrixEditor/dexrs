@@ -10,6 +10,8 @@ from .structs import (
     MethodId,
     ClassDef,
     TypeItem,
+    CatchHandlerData,
+    TryItem,
 )
 from .class_accessor import ClassAccessor
 from .code import CodeItemAccessor
@@ -83,3 +85,8 @@ class DexFile:
     # class data
     def get_class_accessor(self, class_def: ClassDef) -> Optional[ClassAccessor]: ...
     def get_code_item_accessor(self, code_off: int) -> CodeItemAccessor: ...
+    def get_try_items(self, ca: CodeItemAccessor) -> List[TryItem]: ...
+    def get_catch_handlers(self, ca: CodeItemAccessor, try_item: TryItem) -> List[CatchHandlerData]: ...
+    def get_catch_handlers_at(
+        self, ca: CodeItemAccessor, offset: int
+    ) -> List[CatchHandlerData]: ...
