@@ -559,10 +559,9 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
     //------------------------------------------------------------------------------
     pub fn get_try_items(&'a self, ca: &CodeItemAccessor<'_>) -> Result<&'a [TryItem]> {
         // skip heavy work if there are no try items
-        match ca.get_tries_off() {
+        match ca.get_tries_abs_off() {
             None => return Ok(&[]),
             Some(tries_off) => {
-                check_lt_result!(tries_off, self.file_size(), TryItem);
                 self.get_try_items_raw(tries_off as u32, ca.tries_size() as u16)
             }
         }
@@ -582,12 +581,16 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
         &self,
         ca: &CodeItemAccessor<'_>,
         offset: usize,
-    ) -> Result<&'a [u8]> {
-        let data_offset = ca.get_catch_handler_data_off();
-        check_lt_result!(data_offset + offset, self.file_size(), CatchHandlerData);
+    ) -> Result<Option<&'a [u8]>> {
+        match ca.get_catch_handler_data_abs_off() {
+            None => Ok(None),
+            Some(data_offset) => {
+                check_lt_result!(data_offset + offset, self.file_size(), CatchHandlerData);
 
-        // TODO: handle values greater than u16 since u16::MAX is maximum offset
-        Ok(&self.mmap[data_offset + offset..])
+                // TODO: handle values greater than u16 since u16::MAX is maximum offset
+                Ok(Some(&self.mmap[data_offset + offset..]))
+            }
+        }
     }
 
     #[inline]
@@ -595,9 +598,11 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
         &self,
         ca: &CodeItemAccessor<'_>,
         offset: usize,
-    ) -> Result<EncodedCatchHandlerIterator<'_>> {
-        let data = self.get_catch_handler_data(ca, offset)?;
-        EncodedCatchHandlerIterator::new(&data)
+    ) -> Result<Option<EncodedCatchHandlerIterator<'_>>> {
+        match self.get_catch_handler_data(ca, offset)? {
+            None => Ok(None),
+            Some(data) => Ok(Some(EncodedCatchHandlerIterator::new(&data)?)),
+        }
     }
 
     #[inline]
@@ -605,7 +610,7 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
         &self,
         ca: &CodeItemAccessor<'_>,
         try_item: &TryItem,
-    ) -> Result<EncodedCatchHandlerIterator<'_>> {
+    ) -> Result<Option<EncodedCatchHandlerIterator<'_>>> {
         self.iter_catch_handlers_at(ca, try_item.handler_off as usize)
     }
 

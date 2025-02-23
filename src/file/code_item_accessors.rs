@@ -45,21 +45,36 @@ impl<'a> CodeItemAccessor<'a> {
             return None; //
         }
 
-        let offset = (self.code_off() as usize)
-            + std::mem::size_of::<CodeItem>()
-            + self.insns_size_in_code_units() as usize;
+        let offset = self.insns_size_in_bytes() as usize;
         // must be 4-byte aligned
-        let offset = (offset + 3) & !3;
-        Some(offset)
+        let padding = if self.insns.len() % 2 == 1 { 2 } else { 0 };
+        Some(offset + padding)
     }
 
     #[inline]
-    pub fn get_catch_handler_data_off(&self) -> usize {
-        let tries_off = self.code_off() as usize
-            + std::mem::size_of::<CodeItem>()
-            + self.insns_size_in_code_units() as usize;
+    pub fn get_tries_abs_off(&self) -> Option<usize> {
+        match self.get_tries_off() {
+            None => None,
+            Some(tries_off) => Some(tries_off + self.insns_off() as usize),
+        }
+    }
 
-        tries_off + (self.tries_size() as usize * std::mem::size_of::<TryItem>())
+    #[inline]
+    pub fn get_catch_handler_data_off(&self) -> Option<usize> {
+        if let Some(tries_off) = self.get_tries_off() {
+            let offset = tries_off + self.tries_size() as usize * std::mem::size_of::<TryItem>();
+            Some(offset)
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    pub fn get_catch_handler_data_abs_off(&self) -> Option<usize> {
+        match self.get_catch_handler_data_off() {
+            None => None,
+            Some(data_off) => Some(data_off + self.insns_off() as usize),
+        }
     }
 
     #[inline]
@@ -87,8 +102,12 @@ impl<'a> CodeItemAccessor<'a> {
         })
     }
 
-    pub fn code_off(&self) -> u32 {
+    pub fn insns_off(&self) -> u32 {
         self.code_off
+    }
+
+    pub fn code_item_off(&self) -> u32 {
+        self.code_off - std::mem::size_of::<CodeItem>() as u32
     }
 
     pub fn code_item(&self) -> &'a CodeItem {
@@ -172,7 +191,7 @@ impl PyCodeItemAccessor {
 
     #[getter]
     pub fn code_off(&self) -> u32 {
-        self.inner.0.code_off()
+        self.inner.0.insns_off()
     }
 
     #[getter]
@@ -275,7 +294,7 @@ impl<'a> Iterator for DexInstructionIterator<'a> {
 pub struct EncodedCatchHandlerIterator<'a> {
     data: &'a [u8],
     offset: usize,
-    catch_all: bool,
+    has_catch_all: bool,
     remaining: i32,
 }
 
@@ -283,16 +302,31 @@ impl<'a> EncodedCatchHandlerIterator<'a> {
     pub fn new(data: &'a [u8]) -> Result<Self> {
         let mut pos = 0;
         let remaining = leb128::decode_sleb128(&data, &mut pos)?;
+        println!("remaining: {}", remaining);
         Ok(Self {
             data,
             offset: pos,
-            catch_all: remaining <= 0,
+            has_catch_all: remaining <= 0,
+            // If remaining is non-positive, then it is the negative of
+            // the number of catch types, and the catches are followed by a
+            // catch-all handler.
             remaining: if remaining <= 0 {
-                remaining
-            } else {
                 -remaining
+            } else {
+                remaining
             },
         })
+    }
+
+    fn leb128(&mut self) -> u32 {
+        match leb128::decode_leb128_off::<u32>(&self.data, &mut self.offset) {
+            Ok(v) => v,
+            // TODO:
+            Err(_) => panic!(
+                "EncodedCatchHandlerIterator::leb128 decode failed at offset {}",
+                self.offset
+            ),
+        }
     }
 }
 
@@ -306,26 +340,17 @@ impl<'a> Iterator for EncodedCatchHandlerIterator<'a> {
 
         let mut handler = CatchHandlerData::default();
         if self.remaining > 0 {
-            match leb128::decode_leb128_off::<u32>(&self.data, &mut self.offset) {
-                Ok(v) => handler.type_idx = v as TypeIndex,
-                Err(_) => return None,
-            };
-            match leb128::decode_leb128_off::<u32>(&self.data, &mut self.offset) {
-                Ok(v) => handler.address = v,
-                Err(_) => return None,
-            }
+            handler.type_idx = self.leb128() as TypeIndex;
+            handler.address = self.leb128();
             self.remaining -= 1;
             return Some(handler);
         }
 
-        if self.catch_all {
+        if self.has_catch_all {
             handler.is_catch_all = true;
             handler.type_idx = TypeIndex::MAX;
-            match leb128::decode_leb128_off::<u32>(&self.data, &mut self.offset) {
-                Ok(v) => handler.address = v,
-                Err(_) => return None,
-            }
-            self.catch_all = false;
+            handler.address = self.leb128();
+            self.has_catch_all = false;
             return Some(handler);
         }
 

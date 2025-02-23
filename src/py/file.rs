@@ -411,14 +411,18 @@ impl PyDexFileImpl {
     ) -> PyResult<Vec<PyDexCatchHandlerData>> {
         let code_item_accessor = &ca.try_borrow(py)?.inner.0;
         let rs_try_item = &try_item.try_borrow(py)?.0;
-        Ok(dex_action_impl!(
+        let iterator = dex_action_impl!(
             self,
             iter_catch_handlers(code_item_accessor, rs_try_item)?,
             py
-        )
-        .into_iter()
-        .map(Into::into)
-        .collect::<Vec<PyDexCatchHandlerData>>())
+        );
+        match iterator {
+            None => Ok(vec![]),
+            Some(iterator) => Ok(iterator
+                .into_iter()
+                .map(Into::into)
+                .collect::<Vec<PyDexCatchHandlerData>>()),
+        }
     }
 
     pub fn get_catch_handlers_at<'py>(
@@ -428,14 +432,18 @@ impl PyDexFileImpl {
         offset: u32,
     ) -> PyResult<Vec<PyDexCatchHandlerData>> {
         let code_item_accessor = &ca.try_borrow(py)?.inner.0;
-        Ok(dex_action_impl!(
+        let iterator = dex_action_impl!(
             self,
             iter_catch_handlers_at(code_item_accessor, offset as usize)?,
             py
-        )
-        .into_iter()
-        .map(Into::into)
-        .collect::<Vec<PyDexCatchHandlerData>>())
+        );
+        match iterator {
+            None => Ok(vec![]),
+            Some(iterator) => Ok(iterator
+                .into_iter()
+                .map(Into::into)
+                .collect::<Vec<PyDexCatchHandlerData>>()),
+        }
     }
 
     // ----------------------------------------------------------------------------
