@@ -561,9 +561,7 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
         // skip heavy work if there are no try items
         match ca.get_tries_abs_off() {
             None => return Ok(&[]),
-            Some(tries_off) => {
-                self.get_try_items_raw(tries_off as u32, ca.tries_size() as u16)
-            }
+            Some(tries_off) => self.get_try_items_raw(tries_off as u32, ca.tries_size() as u16),
         }
     }
 
@@ -585,10 +583,11 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
         match ca.get_catch_handler_data_abs_off() {
             None => Ok(None),
             Some(data_offset) => {
-                check_lt_result!(data_offset + offset, self.file_size(), CatchHandlerData);
+                let offset = data_offset as usize + offset;
+                check_lt_result!(offset, self.file_size(), CatchHandlerData);
 
                 // TODO: handle values greater than u16 since u16::MAX is maximum offset
-                Ok(Some(&self.mmap[data_offset + offset..]))
+                Ok(Some(&self.mmap[offset..]))
             }
         }
     }

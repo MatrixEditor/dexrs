@@ -425,27 +425,6 @@ impl PyDexFileImpl {
         }
     }
 
-    pub fn get_catch_handlers_at<'py>(
-        &self,
-        py: Python<'py>,
-        ca: Py<PyCodeItemAccessor>,
-        offset: u32,
-    ) -> PyResult<Vec<PyDexCatchHandlerData>> {
-        let code_item_accessor = &ca.try_borrow(py)?.inner.0;
-        let iterator = dex_action_impl!(
-            self,
-            iter_catch_handlers_at(code_item_accessor, offset as usize)?,
-            py
-        );
-        match iterator {
-            None => Ok(vec![]),
-            Some(iterator) => Ok(iterator
-                .into_iter()
-                .map(Into::into)
-                .collect::<Vec<PyDexCatchHandlerData>>()),
-        }
-    }
-
     // ----------------------------------------------------------------------------
     // string data
     // ----------------------------------------------------------------------------

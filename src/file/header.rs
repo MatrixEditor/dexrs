@@ -2,6 +2,7 @@
 use crate::py::{rs_struct_fields, rs_struct_wrapper};
 #[cfg(feature = "python")]
 use std::sync::Arc;
+
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub struct Header {
@@ -117,7 +118,6 @@ pub struct HeaderV41 {
     pub container_size: u32, // total size of all dex files in the container.
     pub header_off: u32,     // offset of this dex's header in the container.
 }
-
 
 // >>> begin python export
 #[cfg(feature = "python")]

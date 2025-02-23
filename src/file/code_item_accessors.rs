@@ -21,9 +21,47 @@ pub struct CodeItemAccessor<'a> {
     code_off: u32,
     code_item: &'a CodeItem,
     insns: &'a [u16],
+    // these values are cached to reduce the number of calculations
+    tries_off: Option<u32>,
+    catch_handlers_off: Option<u32>,
 }
 
 impl<'a> CodeItemAccessor<'a> {
+    #[inline(always)]
+    pub fn from_code_item<C>(
+        dex: &DexFile<'a, C>,
+        code_item: &'a CodeItem,
+        code_off: u32,
+    ) -> Result<CodeItemAccessor<'a>>
+    where
+        C: DexContainer<'a>,
+    {
+        let insns = match code_off {
+            0 => &[],
+            _ => dex.get_insns_raw(code_off, code_item.insns_size)?,
+        };
+
+        // end of insns must be 4-byte aligned
+        let tries_off = insns.len() * 2 + if insns.len() % 2 == 1 { 2 } else { 0 };
+        let tries_size = code_item.tries_size as usize * std::mem::size_of::<TryItem>();
+        Ok(CodeItemAccessor {
+            code_off,
+            code_item,
+            insns,
+            tries_off: if code_item.tries_size > 0 {
+                Some(tries_off as u32)
+            } else {
+                None
+            },
+            catch_handlers_off: if code_item.tries_size > 0 {
+                // Start of catch handlers will be at the end of all TryItems
+                Some((tries_off + tries_size) as u32)
+            } else {
+                None
+            },
+        })
+    }
+
     #[inline]
     pub fn insns_size_in_code_units(&self) -> u32 {
         self.insns.len() as u32
@@ -40,66 +78,34 @@ impl<'a> CodeItemAccessor<'a> {
     }
 
     #[inline]
-    pub fn get_tries_off(&self) -> Option<usize> {
-        if self.tries_size() == 0 {
-            return None; //
-        }
-
-        let offset = self.insns_size_in_bytes() as usize;
-        // must be 4-byte aligned
-        let padding = if self.insns.len() % 2 == 1 { 2 } else { 0 };
-        Some(offset + padding)
+    pub fn get_tries_off(&self) -> Option<u32> {
+        self.tries_off
     }
 
     #[inline]
-    pub fn get_tries_abs_off(&self) -> Option<usize> {
+    pub fn get_tries_abs_off(&self) -> Option<u32> {
         match self.get_tries_off() {
             None => None,
-            Some(tries_off) => Some(tries_off + self.insns_off() as usize),
+            Some(tries_off) => Some(tries_off + self.insns_off()),
         }
     }
 
     #[inline]
-    pub fn get_catch_handler_data_off(&self) -> Option<usize> {
-        if let Some(tries_off) = self.get_tries_off() {
-            let offset = tries_off + self.tries_size() as usize * std::mem::size_of::<TryItem>();
-            Some(offset)
-        } else {
-            None
-        }
+    pub fn get_catch_handler_data_off(&self) -> Option<u32> {
+        self.catch_handlers_off
     }
 
     #[inline]
-    pub fn get_catch_handler_data_abs_off(&self) -> Option<usize> {
+    pub fn get_catch_handler_data_abs_off(&self) -> Option<u32> {
         match self.get_catch_handler_data_off() {
             None => None,
-            Some(data_off) => Some(data_off + self.insns_off() as usize),
+            Some(data_off) => Some(data_off + self.insns_off()),
         }
     }
 
     #[inline]
     pub fn has_code(&self) -> bool {
         !self.insns.is_empty()
-    }
-
-    #[inline(always)]
-    pub fn from_code_item<C>(
-        dex: &DexFile<'a, C>,
-        code_item: &'a CodeItem,
-        code_off: u32,
-    ) -> Result<CodeItemAccessor<'a>>
-    where
-        C: DexContainer<'a>,
-    {
-        let insns = match code_off {
-            0 => &[],
-            _ => dex.get_insns_raw(code_off, code_item.insns_size)?,
-        };
-        Ok(CodeItemAccessor {
-            code_off,
-            code_item,
-            insns,
-        })
     }
 
     pub fn insns_off(&self) -> u32 {
@@ -191,6 +197,7 @@ impl PyCodeItemAccessor {
 
     #[getter]
     pub fn code_off(&self) -> u32 {
+        // TODO: add docs
         self.inner.0.insns_off()
     }
 
@@ -318,15 +325,9 @@ impl<'a> EncodedCatchHandlerIterator<'a> {
         })
     }
 
-    fn leb128(&mut self) -> u32 {
-        match leb128::decode_leb128_off::<u32>(&self.data, &mut self.offset) {
-            Ok(v) => v,
-            // TODO:
-            Err(_) => panic!(
-                "EncodedCatchHandlerIterator::leb128 decode failed at offset {}",
-                self.offset
-            ),
-        }
+    #[inline(always)]
+    fn leb128(&mut self) -> Result<u32> {
+        leb128::decode_leb128_off::<u32>(&self.data, &mut self.offset)
     }
 }
 
@@ -340,8 +341,14 @@ impl<'a> Iterator for EncodedCatchHandlerIterator<'a> {
 
         let mut handler = CatchHandlerData::default();
         if self.remaining > 0 {
-            handler.type_idx = self.leb128() as TypeIndex;
-            handler.address = self.leb128();
+            match self.leb128() {
+                Ok(v) => handler.type_idx = v as TypeIndex,
+                Err(_) => return None,
+            }
+            match self.leb128() {
+                Ok(v) => handler.address = v,
+                Err(_) => return None,
+            }
             self.remaining -= 1;
             return Some(handler);
         }
@@ -349,7 +356,10 @@ impl<'a> Iterator for EncodedCatchHandlerIterator<'a> {
         if self.has_catch_all {
             handler.is_catch_all = true;
             handler.type_idx = TypeIndex::MAX;
-            handler.address = self.leb128();
+            match self.leb128() {
+                Ok(v) => handler.address = v,
+                Err(e) => return None,
+            }
             self.has_catch_all = false;
             return Some(handler);
         }
