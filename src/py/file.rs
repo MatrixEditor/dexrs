@@ -7,7 +7,10 @@ use crate::file::{
     PyDexFieldId, PyDexHeader, PyDexMethodId, PyDexProtoId, PyDexStringId, PyDexTypeId,
     PyDexTypeItem, PyFileDexContainer, PyInMemoryDexContainer, StringIndex, TypeIndex,
 };
-use crate::file::{PyCodeItemAccessor, PyDexCatchHandlerData, PyDexTryItem};
+use crate::file::{
+    AnnotationSetItem, PyCodeItemAccessor, PyDexAnnotationItem, PyDexCatchHandlerData,
+    PyDexClassAnnotationsAccessor, PyDexTryItem,
+};
 
 use crate::file::class_accessor::PyClassAccessor;
 
@@ -423,6 +426,39 @@ impl PyDexFileImpl {
                 .map(Into::into)
                 .collect::<Vec<PyDexCatchHandlerData>>()),
         }
+    }
+
+    //------------------------------------------------------------------------------
+    // Annotations
+    //------------------------------------------------------------------------------
+    pub fn get_annotation_set<'py>(
+        &self,
+        py: Python<'py>,
+        offset: u32,
+    ) -> PyResult<AnnotationSetItem<'_>> {
+        Ok(dex_action_impl!(self, get_annotation_set(offset)?, py))
+    }
+
+    pub fn get_annotation<'py>(
+        &self,
+        py: Python<'py>,
+        offset: u32,
+    ) -> PyResult<PyDexAnnotationItem> {
+        Ok(dex_action_impl!(self, get_annotation(offset)?, py).into())
+    }
+
+    pub fn get_class_annotation_accessor<'py>(
+        &self,
+        py: Python<'py>,
+        class_def: Py<PyDexClassDef>,
+    ) -> PyResult<PyDexClassAnnotationsAccessor> {
+        let rs_class_def = &class_def.try_borrow(py)?.0;
+        Ok(dex_action_impl!(
+            self,
+            get_class_annotation_accessor(rs_class_def.annotations_off)?,
+            py
+        )
+        .into())
     }
 
     // ----------------------------------------------------------------------------

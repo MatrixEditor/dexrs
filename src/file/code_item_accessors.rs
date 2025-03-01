@@ -358,7 +358,7 @@ impl<'a> Iterator for EncodedCatchHandlerIterator<'a> {
             handler.type_idx = TypeIndex::MAX;
             match self.leb128() {
                 Ok(v) => handler.address = v,
-                Err(e) => return None,
+                Err(_) => return None,
             }
             self.has_catch_all = false;
             return Some(handler);

@@ -469,11 +469,6 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
         EncodedValue::new(&self.mmap[off as usize..])
     }
 
-    pub fn get_annotation(&self, off: u32) -> Result<AnnotationItem> {
-        check_lt_result!(off, self.file_size(), Annotation);
-        AnnotationItem::from_raw_parts(&self.mmap[off as usize..])
-    }
-
     //------------------------------------------------------------------------------
     // Method Ids
     //------------------------------------------------------------------------------
@@ -617,9 +612,8 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
     // Annotations
     //------------------------------------------------------------------------------
     // see implementation in annotations.rs for accessor
-    pub fn get_annotation_set(&'a self, off: u32) -> Result<AnnotationSetItem<'a>> {
+    pub fn get_annotation_set(&self, off: u32) -> Result<AnnotationSetItem<'a>> {
         // this will not panic if offset is zero
-        check_lt_result!(off, self.file_size(), AnnotationSetItem);
         match self.data_ptr::<u32>(off)? {
             None => Ok(&[]),
             Some(size) => {
@@ -654,6 +648,16 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
         self.get_annotation_set(anno_item.annotations_off)
     }
 
+    #[inline]
+    pub fn get_annotation(&self, annotation_off: u32) -> Result<AnnotationItem>
+    {
+        check_lt_result!(annotation_off, self.file_size(), Annotation);
+        AnnotationItem::from_raw_parts(&self.mmap[annotation_off as usize..])
+    }
+
+    //------------------------------------------------------------------------------
+    // internal helpers
+    //------------------------------------------------------------------------------
     #[inline]
     fn offset_of<T: Sized, U>(&self, buf: &[U], o: &T) -> Result<u32> {
         let start = buf.as_ptr() as usize;
@@ -741,6 +745,9 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
         }
     }
 
+    //------------------------------------------------------------------------------
+    // Initialization
+    //------------------------------------------------------------------------------
     fn init(&self) -> Result<()> {
         let container_size = self.file_size();
         if container_size < std::mem::size_of::<Header>() {

@@ -1,7 +1,19 @@
+#[cfg(feature = "python")]
+use std::sync::Arc;
+
+#[cfg(feature = "python")]
+use crate::{
+    file::{
+        PyDexFieldAnnotationsItem, PyDexMethodAnnotationsItem,
+        PyDexParameterAnnotationsItem,
+    },
+    py::rs_type_wrapper,
+};
+
 use crate::{dex_err, error::DexError, leb128::decode_leb128, Result};
 
 use super::{
-    AnnotationElement, AnnotationItem, AnnotationSetItem, AnnotationsDirectoryItem, ClassDef,
+    AnnotationElement, AnnotationItem, AnnotationSetItem, AnnotationsDirectoryItem,
     DexContainer, DexFile, EncodedAnnotation, EncodedArray, EncodedValue, FieldAnnotationsItem,
     MethodAnnotationsItem, ParameterAnnotationsItem,
 };
@@ -10,8 +22,6 @@ use super::{
 // ClassAnnotationsAccessor
 //------------------------------------------------------------------------------
 pub struct ClassAnnotationsAccessor<'a> {
-    class_def: &'a ClassDef,
-
     field_annotations: &'a [FieldAnnotationsItem],
     method_annotations: &'a [MethodAnnotationsItem],
     parameter_annotations: &'a [ParameterAnnotationsItem],
@@ -20,10 +30,10 @@ pub struct ClassAnnotationsAccessor<'a> {
 
 impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
     pub fn get_class_annotation_accessor(
-        &'a self,
-        class_def: &'a ClassDef,
+        &self,
+        annotations_off: u32,
     ) -> Result<ClassAnnotationsAccessor<'a>> {
-        ClassAnnotationsAccessor::new(self, class_def)
+        ClassAnnotationsAccessor::new(self, annotations_off)
     }
 }
 
@@ -37,15 +47,15 @@ macro_rules! read_annotations {
 }
 
 impl<'a> ClassAnnotationsAccessor<'a> {
-    pub fn new<C>(dex: &'a DexFile<'a, C>, class_def: &'a ClassDef) -> Result<Self>
+    pub fn new<C>(dex: &DexFile<'a, C>, annotations_off: u32) -> Result<Self>
     where
         C: DexContainer<'a>,
     {
-        match dex.data_ptr::<AnnotationsDirectoryItem>(class_def.annotations_off)? {
-            None => Ok(ClassAnnotationsAccessor::new_empty(class_def)),
+        match dex.data_ptr::<AnnotationsDirectoryItem>(annotations_off)? {
+            None => Ok(ClassAnnotationsAccessor::new_empty()),
             Some(item) => {
-                let mut start_offset = class_def.annotations_off as usize
-                    + std::mem::size_of::<AnnotationsDirectoryItem>();
+                let mut start_offset =
+                    annotations_off as usize + std::mem::size_of::<AnnotationsDirectoryItem>();
 
                 let field_annotations =
                     read_annotations!(dex, start_offset, item.fields_size, FieldAnnotationsItem);
@@ -66,7 +76,6 @@ impl<'a> ClassAnnotationsAccessor<'a> {
 
                 let class_annotations = dex.get_annotation_set(item.class_annotations_off)?;
                 Ok(Self {
-                    class_def,
                     field_annotations,
                     method_annotations,
                     parameter_annotations,
@@ -76,9 +85,8 @@ impl<'a> ClassAnnotationsAccessor<'a> {
         }
     }
 
-    pub fn new_empty(class_def: &'a ClassDef) -> Self {
+    pub fn new_empty() -> Self {
         Self {
-            class_def,
             field_annotations: &[],
             method_annotations: &[],
             parameter_annotations: &[],
@@ -87,31 +95,75 @@ impl<'a> ClassAnnotationsAccessor<'a> {
     }
 
     #[inline]
-    pub fn get_class_def(&self) -> &'a ClassDef {
-        self.class_def
-    }
-
-    #[inline]
-    pub fn get_field_ann(&self) -> &'a [FieldAnnotationsItem] {
+    pub fn get_field_annotations_items(&self) -> &'a [FieldAnnotationsItem] {
         self.field_annotations
     }
 
     #[inline]
-    pub fn get_method_ann(&self) -> &'a [MethodAnnotationsItem] {
+    pub fn get_method_annotations_items(&self) -> &'a [MethodAnnotationsItem] {
         self.method_annotations
     }
 
     #[inline]
-    pub fn get_parameter_ann(&self) -> &'a [ParameterAnnotationsItem] {
+    pub fn get_parameter_annotations_items(&self) -> &'a [ParameterAnnotationsItem] {
         self.parameter_annotations
     }
 
     #[inline]
-    pub fn get_class_ann(&self) -> AnnotationSetItem<'a> {
+    pub fn get_class_annotation_set(&self) -> AnnotationSetItem<'a> {
         self.class_annotations
     }
 }
 
+// >>> begin python export
+#[cfg(feature = "python")]
+rs_type_wrapper!(
+    ClassAnnotationsAccessor<'static>,
+    PyDexClassAnnotationsAccessor,
+    RsClassAnnotationsAccessor,
+    name: "ClassAnnotationsAccessor",
+    module: "dexrs._internal.annotation"
+);
+
+#[cfg(feature = "python")]
+#[pyo3::pymethods]
+impl PyDexClassAnnotationsAccessor {
+    pub fn get_class_annotation_set(&self) -> AnnotationSetItem<'_> {
+        self.inner.0.get_class_annotation_set()
+    }
+
+    pub fn get_field_annotations_items(&self) -> Vec<PyDexFieldAnnotationsItem> {
+        self.inner
+            .0
+            .get_field_annotations_items()
+            .iter()
+            .map(Into::into)
+            .collect()
+    }
+
+    pub fn get_method_annotations_items(&self) -> Vec<PyDexMethodAnnotationsItem> {
+        self.inner
+            .0
+            .get_method_annotations_items()
+            .iter()
+            .map(Into::into)
+            .collect()
+    }
+
+    pub fn get_parameter_annotations_items(&self) -> Vec<PyDexParameterAnnotationsItem> {
+        self.inner
+            .0
+            .get_parameter_annotations_items()
+            .iter()
+            .map(Into::into)
+            .collect()
+    }
+}
+// <<< end python export
+
+//------------------------------------------------------------------------------
+// EncodedValue
+//------------------------------------------------------------------------------
 // Encoded values require special handling and they can't be parsed using
 // zero-copy.
 #[repr(u8)]
@@ -425,3 +477,13 @@ impl From<u8> for EncodedValueType {
         }
     }
 }
+
+// >>> begin python module export
+#[cfg(feature = "python")]
+#[pyo3::pymodule(name = "annotation")]
+pub(crate) mod py_annotations {
+    #[pymodule_export]
+    use super::PyDexClassAnnotationsAccessor;
+}
+
+// <<< end python module export
