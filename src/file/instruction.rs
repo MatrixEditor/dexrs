@@ -28,11 +28,11 @@ impl<'a> Instruction<'a> {
     #[inline]
     pub fn relative_at(&self, offset: usize) -> Result<Instruction<'a>> {
         if offset + 1 >= self.0.len() {
-            return dex_err!(BadInstructionOffset {
+            dex_err!(BadInstructionOffset {
                 opcode: self.name(),
-                offset: offset,
+                offset,
                 size: self.0.len()
-            });
+            })
         } else {
             Ok(Instruction::at(&self.0[offset..]))
         }
@@ -43,7 +43,7 @@ impl<'a> Instruction<'a> {
         if offset >= self.0.len() {
             return dex_err!(BadInstruction {
                 opcode: self.name(),
-                offset: offset,
+                offset,
                 size: self.0.len(),
                 target_type: "u16"
             });
@@ -56,7 +56,7 @@ impl<'a> Instruction<'a> {
         if offset >= self.0.len() {
             return dex_err!(BadInstruction {
                 opcode: self.name(),
-                offset: offset,
+                offset,
                 size: self.0.len(),
                 target_type: "u32"
             });
@@ -439,7 +439,7 @@ define_flags!(
 impl<'a> Instruction<'a> {
     #[inline(always)]
     const fn format_desc(&self) -> &'static InstructionDescriptor {
-        &Instruction::INSN_DESCRIPTORS[(self.0[0] as u8 & 0xFF) as usize]
+        &Instruction::INSN_DESCRIPTORS[(self.0[0] as u8) as usize]
     }
 
     #[inline(always)]
@@ -454,7 +454,7 @@ impl<'a> Instruction<'a> {
 
     #[inline(always)]
     pub const fn name(&self) -> &'static str {
-        &self.format_desc().name
+        self.format_desc().name
     }
 
     pub fn next(&self) -> Option<Instruction<'a>> {
@@ -462,7 +462,7 @@ impl<'a> Instruction<'a> {
         if self.0.len() <= self.size_in_code_units() + 2 {
             return None;
         }
-        return Some(Instruction::at(&self.0[self.size_in_code_units()..]));
+        Some(Instruction::at(&self.0[self.size_in_code_units()..]))
     }
 
     #[inline(always)]
@@ -484,8 +484,7 @@ impl<'a> Instruction<'a> {
             signatures::ArrayDataSignature => {
                 let element_size = self.fetch16(1)? as usize;
                 let length = self.fetch32(2)? as usize;
-                // The plus 1 is to round up for odd size and width.
-                4 + (element_size * length + 1) / 2
+                4 + (element_size * length).div_ceil(2)
             }
             _ => 1,
         })
@@ -772,35 +771,35 @@ pub mod vreg {
     //------------------------------------------------------------------------------
     #[inline]
     pub fn has_a(inst: &Instruction<'_>) -> bool {
-        match &inst.format_desc().format {
+        matches!(
+            &inst.format_desc().format,
             Format::k10t
-            | Format::k10x
-            | Format::k11n
-            | Format::k11x
-            | Format::k12x
-            | Format::k20t
-            | Format::k21c
-            | Format::k21h
-            | Format::k21s
-            | Format::k21t
-            | Format::k22b
-            | Format::k22c
-            | Format::k22s
-            | Format::k22t
-            | Format::k22x
-            | Format::k23x
-            | Format::k30t
-            | Format::k31c
-            | Format::k31i
-            | Format::k31t
-            | Format::k32x
-            | Format::k35c
-            | Format::k3rc
-            | Format::k45cc
-            | Format::k4rcc
-            | Format::k51l => true,
-            _ => false,
-        }
+                | Format::k10x
+                | Format::k11n
+                | Format::k11x
+                | Format::k12x
+                | Format::k20t
+                | Format::k21c
+                | Format::k21h
+                | Format::k21s
+                | Format::k21t
+                | Format::k22b
+                | Format::k22c
+                | Format::k22s
+                | Format::k22t
+                | Format::k22x
+                | Format::k23x
+                | Format::k30t
+                | Format::k31c
+                | Format::k31i
+                | Format::k31t
+                | Format::k32x
+                | Format::k35c
+                | Format::k3rc
+                | Format::k45cc
+                | Format::k4rcc
+                | Format::k51l
+        )
     }
 
     #[inline]
@@ -847,30 +846,30 @@ pub mod vreg {
     //------------------------------------------------------------------------------
     #[inline]
     pub fn has_b(inst: &Instruction<'_>) -> bool {
-        match &inst.format_desc().format {
+        matches!(
+            &inst.format_desc().format,
             Format::k11n
-            | Format::k12x
-            | Format::k21c
-            | Format::k21h
-            | Format::k21s
-            | Format::k21t
-            | Format::k22b
-            | Format::k22c
-            | Format::k22s
-            | Format::k22t
-            | Format::k22x
-            | Format::k23x
-            | Format::k31c
-            | Format::k31i
-            | Format::k31t
-            | Format::k32x
-            | Format::k35c
-            | Format::k3rc
-            | Format::k45cc
-            | Format::k4rcc
-            | Format::k51l => true,
-            _ => false,
-        }
+                | Format::k12x
+                | Format::k21c
+                | Format::k21h
+                | Format::k21s
+                | Format::k21t
+                | Format::k22b
+                | Format::k22c
+                | Format::k22s
+                | Format::k22t
+                | Format::k22x
+                | Format::k23x
+                | Format::k31c
+                | Format::k31i
+                | Format::k31t
+                | Format::k32x
+                | Format::k35c
+                | Format::k3rc
+                | Format::k45cc
+                | Format::k4rcc
+                | Format::k51l
+        )
     }
 
     pub fn has_wide_b(inst: &Instruction<'_>) -> bool {
@@ -922,18 +921,18 @@ pub mod vreg {
     //------------------------------------------------------------------------------
     #[inline]
     pub fn has_c(inst: &Instruction<'_>) -> bool {
-        match &inst.format_desc().format {
+        matches!(
+            &inst.format_desc().format,
             Format::k22b
-            | Format::k22c
-            | Format::k22s
-            | Format::k22t
-            | Format::k23x
-            | Format::k35c
-            | Format::k3rc
-            | Format::k45cc
-            | Format::k4rcc => true,
-            _ => false,
-        }
+                | Format::k22c
+                | Format::k22s
+                | Format::k22t
+                | Format::k23x
+                | Format::k35c
+                | Format::k3rc
+                | Format::k45cc
+                | Format::k4rcc
+        )
     }
 
     #[inline]
@@ -961,10 +960,7 @@ pub mod vreg {
     //------------------------------------------------------------------------------
     #[inline]
     pub fn has_h(inst: &Instruction<'_>) -> bool {
-        match &inst.format_desc().format {
-            Format::k45cc | Format::k4rcc => true,
-            _ => false,
-        }
+        matches!(&inst.format_desc().format, Format::k45cc | Format::k4rcc)
     }
 
     #[inline]
@@ -985,10 +981,7 @@ pub mod vreg {
     //------------------------------------------------------------------------------
     #[inline]
     pub fn has_var_args(inst: &Instruction<'_>) -> bool {
-        match &inst.format_desc().format {
-            Format::k35c | Format::k45cc => true,
-            _ => false,
-        }
+        matches!(&inst.format_desc().format, Format::k35c | Format::k45cc)
     }
 
     #[inline]
@@ -1029,10 +1022,7 @@ pub mod vreg {
     //------------------------------------------------------------------------------
     #[inline]
     pub fn has_args_range(inst: &Instruction<'_>) -> bool {
-        match &inst.format_desc().format {
-            Format::k3rc | Format::k4rcc => true,
-            _ => false,
-        }
+        matches!(&inst.format_desc().format, Format::k3rc | Format::k4rcc)
     }
 
     pub fn args_range(inst: &Instruction<'_>) -> Result<RangeInclusive<u16>> {

@@ -32,7 +32,7 @@ rs_struct_wrapper!("StringId", PyDexStringId, StringId);
 rs_struct_fields!(PyDexStringId, {
     (string_data_off, StringIndex),
 },);
-/// <<< end python export
+// <<< end python export
 
 // --------------------------------------------------------------------
 // TypeId
@@ -54,7 +54,7 @@ rs_struct_wrapper!("TypeId", PyDexTypeId, TypeId);
 rs_struct_fields!(PyDexTypeId, {
     (descriptor_idx, StringIndex),
 },);
-/// <<< end python export
+// <<< end python export
 
 // --------------------------------------------------------------------
 // FieldId
@@ -80,7 +80,7 @@ rs_struct_fields!(PyDexFieldId, {
     (type_idx, TypeIndex),
     (name_idx, StringIndex),
 },);
-/// <<< end python export
+// <<< end python export
 
 // --------------------------------------------------------------------
 // ProtoId
@@ -107,7 +107,7 @@ rs_struct_fields!(PyDexProtoId, {
     (return_type_idx, TypeIndex),
     (parameters_off, u32),
 },);
-/// <<< end python export
+// <<< end python export
 
 // --------------------------------------------------------------------
 // MethodId
@@ -304,7 +304,7 @@ impl<'a> HiddenapiClassData<'a> {
     }
 }
 
-unsafe impl<'a> plain::Plain for HiddenapiClassData<'a> {}
+unsafe impl plain::Plain for HiddenapiClassData<'_> {}
 
 // --------------------------------------------------------------------
 // CodeItem

@@ -91,8 +91,7 @@ fn utf16_from_utf8(utf8_data_in: &[u8], offset: &mut usize) -> u32 {
 
     let mut surrogate_pair: u32 = 0x00;
     surrogate_pair |= ((code_point >> 10) + 0xd7c0) & 0xFFFF;
-    surrogate_pair |= ((code_point & 0x03FF) + 0xdc80) << 16;
-    return surrogate_pair;
+    surrogate_pair | ((code_point & 0x03FF) + 0xdc80) << 16
 }
 
 #[inline(always)]
@@ -223,6 +222,12 @@ pub struct Options {
     pub replace_bad_surrogates: bool,
 }
 
+impl Default for Options {
+    fn default() -> Self {
+        Options::new()
+    }
+}
+
 impl Options {
     pub fn new() -> Options {
         Options {
@@ -244,7 +249,7 @@ impl Options {
 
 fn convert_utf16_to_mutf8<Append>(utf16_in: &[u16], options: &Options, mut append: Append)
 where
-    Append: FnMut(u8) -> (),
+    Append: FnMut(u8),
 {
     let mut in_idx = 0;
     while in_idx < utf16_in.len() {
@@ -262,7 +267,7 @@ where
                     && in_idx + 1 != utf16_in.len()
                     && !is_trail(utf16_in[in_idx + 1]))
             {
-                append('?' as u8);
+                append(b'?');
             } else {
                 let code_point = get_supplementary(ch, utf16_in[in_idx + 1]);
                 in_idx += 1;

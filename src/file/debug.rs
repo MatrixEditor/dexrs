@@ -24,7 +24,7 @@ pub mod code {
     pub const DBG_SET_FILE: u8             = 0x09;
 
     pub const DBG_FIRST_SPECIAL: u8        = 0x0a;
-    pub const DBG_LINE_BASE: u8            = (-4 as i8) as u8;
+    pub const DBG_LINE_BASE: u8            = -4_i8 as u8;
     pub const DBG_LINE_RANGE: u8           = 15;
 }
 
@@ -45,6 +45,12 @@ impl PositionInfo {
             prologue_end: false,
             epilogue_begin: false,
         }
+    }
+}
+
+impl Default for PositionInfo {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -74,11 +80,11 @@ impl<'a> CodeItemDebugInfoAccessor<'a> {
     where
         F: Fn(u32),
     {
-        let line = decode_leb128_off(&self.ptr, offset)?;
-        let size = decode_leb128_off::<u32>(&self.ptr, offset)?;
+        let line = decode_leb128_off(self.ptr, offset)?;
+        let size = decode_leb128_off::<u32>(self.ptr, offset)?;
 
         for _ in 0..size {
-            let index = decode_leb128p1_off(&self.ptr, offset)?;
+            let index = decode_leb128p1_off(self.ptr, offset)?;
             visitor(index as u32);
         }
         Ok(line)
@@ -100,29 +106,29 @@ impl<'a> CodeItemDebugInfoAccessor<'a> {
                 code::DBG_END_SEQUENCE => break,
                 // This will cause overflow
                 code::DBG_ADVANCE_PC => {
-                    entry.address += decode_leb128_off::<u32>(&self.ptr, &mut offset)?
+                    entry.address += decode_leb128_off::<u32>(self.ptr, &mut offset)?
                 }
                 code::DBG_ADVANCE_LINE => {
-                    entry.line += decode_leb128_off::<u32>(&self.ptr, &mut offset)?
+                    entry.line += decode_leb128_off::<u32>(self.ptr, &mut offset)?
                 }
                 code::DBG_START_LOCAL => {
-                    decode_leb128_off::<u32>(&self.ptr, &mut offset)?; // reg
-                    decode_leb128p1_off(&self.ptr, &mut offset)?; // name
-                    decode_leb128p1_off(&self.ptr, &mut offset)?; // descriptor
+                    decode_leb128_off::<u32>(self.ptr, &mut offset)?; // reg
+                    decode_leb128p1_off(self.ptr, &mut offset)?; // name
+                    decode_leb128p1_off(self.ptr, &mut offset)?; // descriptor
                 }
                 code::DBG_START_LOCAL_EXTENDED => {
-                    decode_leb128_off::<u32>(&self.ptr, &mut offset)?; // reg
-                    decode_leb128p1_off(&self.ptr, &mut offset)?; // name
-                    decode_leb128p1_off(&self.ptr, &mut offset)?; // descriptor
-                    decode_leb128p1_off(&self.ptr, &mut offset)?; // signature
+                    decode_leb128_off::<u32>(self.ptr, &mut offset)?; // reg
+                    decode_leb128p1_off(self.ptr, &mut offset)?; // name
+                    decode_leb128p1_off(self.ptr, &mut offset)?; // descriptor
+                    decode_leb128p1_off(self.ptr, &mut offset)?; // signature
                 }
                 code::DBG_END_LOCAL | code::DBG_RESTART_LOCAL => {
-                    decode_leb128_off::<u32>(&self.ptr, &mut offset)?; // reg
+                    decode_leb128_off::<u32>(self.ptr, &mut offset)?; // reg
                 }
                 code::DBG_SET_PROLOGUE_END => entry.prologue_end = true,
                 code::DBG_SET_EPILOGUE_BEGIN => entry.epilogue_begin = true,
                 code::DBG_SET_FILE => {
-                    let file = decode_leb128p1_off(&self.ptr, &mut offset)?; // file
+                    let file = decode_leb128p1_off(self.ptr, &mut offset)?; // file
                     entry.file = SourceFile::Other(file as u32);
                 }
                 _ => {
@@ -154,8 +160,8 @@ impl<'dex> DebugInfoParameterNamesIterator<'dex> {
     pub fn new(ptr: &'dex [u8], offset: usize) -> Result<Self> {
         let mut pos = offset;
         // skipping line number
-        decode_leb128_off::<u32>(&ptr, &mut pos)?;
-        let size = decode_leb128_off::<u32>(&ptr, &mut pos)? as usize;
+        decode_leb128_off::<u32>(ptr, &mut pos)?;
+        let size = decode_leb128_off::<u32>(ptr, &mut pos)? as usize;
         Ok(Self {
             ptr,
             offset: pos,
@@ -165,7 +171,7 @@ impl<'dex> DebugInfoParameterNamesIterator<'dex> {
     }
 }
 
-impl<'a> Iterator for DebugInfoParameterNamesIterator<'a> {
+impl Iterator for DebugInfoParameterNamesIterator<'_> {
     type Item = u32;
 
     fn next(&mut self) -> Option<u32> {
@@ -173,7 +179,7 @@ impl<'a> Iterator for DebugInfoParameterNamesIterator<'a> {
             return None;
         }
         self.idx += 1;
-        match decode_leb128p1_off(&self.ptr, &mut self.offset) {
+        match decode_leb128p1_off(self.ptr, &mut self.offset) {
             Ok(v) => Some(v as u32),
             Err(_) => None,
         }

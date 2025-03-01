@@ -270,7 +270,7 @@ fn check_size<T: Sized>(
     let size = std::mem::size_of::<T>();
     if value_arg as usize + 1 >= size {
         return dex_err!(BadEncodedValueSize {
-            value_type: value_type,
+            value_type,
             size: value_arg as usize,
             max: size
         });
@@ -278,7 +278,7 @@ fn check_size<T: Sized>(
 
     if offset + width >= value.len() {
         return dex_err!(InvalidEncodedValue {
-            value_type: value_type,
+            value_type,
             offset: offset + width,
             size: value.len()
         });
@@ -371,8 +371,8 @@ impl EncodedValue {
         }
 
         let header_byte = value[*offset];
-        let value_type = header_byte & 0x1F_u8 as u8;
-        let value_arg = ((header_byte & 0xE0) >> 5) as u8;
+        let value_type = header_byte & 0x1F_u8;
+        let value_arg = (header_byte & 0xE0) >> 5;
         if !EncodedValueType::is_valid(value_type) {
             return dex_err!(BadEncodedValueType, value_type);
         }
@@ -437,18 +437,12 @@ impl EncodedValue {
 impl EncodedValueType {
     #[inline]
     pub fn is_valid(value_type: u8) -> bool {
-        match value_type {
-            0x00 | 0x02..=0x04 | 0x06 | 0x10 | 0x11 | 0x15..=0x1F => true,
-            _ => false,
-        }
+        matches!(value_type, 0x00 | 0x02..=0x04 | 0x06 | 0x10 | 0x11 | 0x15..=0x1F)
     }
 
     #[inline]
     pub fn is_primitive(value_type: u8) -> bool {
-        match value_type {
-            0x00 | 0x02..=0x06 | 0x10 | 0x11 => true,
-            _ => false,
-        }
+        matches!(value_type, 0x00 | 0x02..=0x06 | 0x10 | 0x11)
     }
 }
 

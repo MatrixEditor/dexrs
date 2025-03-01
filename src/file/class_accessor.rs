@@ -25,7 +25,7 @@ pub trait ClassItemBase: Copy + Clone + Default {
 // ----------------------------------------------------------------------------
 // Method
 // ----------------------------------------------------------------------------
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Default)]
 pub struct Method {
     pub index: u32,
     pub access_flags: u32,
@@ -33,7 +33,7 @@ pub struct Method {
     pub is_static_or_direct: bool,
 }
 
-impl<'a> Method {
+impl Method {
     #[inline]
     pub fn get_direct_invoke_type(&self) -> InvokeType {
         if self.access_flags & ACC_STATIC != 0 {
@@ -56,10 +56,10 @@ impl<'a> Method {
     }
 }
 
-impl<'a> ClassItemBase for Method {
+impl ClassItemBase for Method {
     fn read(&mut self, data: &'_ [u8], pos: &mut usize) -> Result<()> {
         let target = self.index as usize;
-        let value = decode_leb128_off::<u32>(&data, pos)?;
+        let value = decode_leb128_off::<u32>(data, pos)?;
         if target + value as usize > u32::MAX as usize {
             return dex_err!(BadEncodedIndex {
                 index: self.index,
@@ -68,24 +68,13 @@ impl<'a> ClassItemBase for Method {
             });
         }
         self.index += value;
-        self.access_flags = decode_leb128_off::<u32>(&data, pos)?;
-        self.code_offset = decode_leb128_off::<u32>(&data, pos)?;
+        self.access_flags = decode_leb128_off::<u32>(data, pos)?;
+        self.code_offset = decode_leb128_off::<u32>(data, pos)?;
         Ok(())
     }
 
     fn next_section(&mut self) {
         self.is_static_or_direct = true;
-    }
-}
-
-impl Default for Method {
-    fn default() -> Self {
-        Self {
-            index: 0,
-            access_flags: 0,
-            code_offset: 0,
-            is_static_or_direct: false,
-        }
     }
 }
 
@@ -132,10 +121,10 @@ pub struct Field {
     pub is_static: bool,
 }
 
-impl<'a> ClassItemBase for Field {
+impl ClassItemBase for Field {
     fn read(&mut self, data: &'_ [u8], pos: &mut usize) -> Result<()> {
         let target = self.index as usize;
-        let value = decode_leb128_off::<u32>(&data, pos)?;
+        let value = decode_leb128_off::<u32>(data, pos)?;
         if target + value as usize > u32::MAX as usize {
             return dex_err!(BadEncodedIndex {
                 index: self.index,
@@ -144,7 +133,7 @@ impl<'a> ClassItemBase for Field {
             });
         }
         self.index += value;
-        self.access_flags = decode_leb128_off::<u32>(&data, pos)?;
+        self.access_flags = decode_leb128_off::<u32>(data, pos)?;
         Ok(())
     }
 
@@ -247,10 +236,10 @@ impl<'a> ClassAccessor<'a> {
             num_instance_fields: 0,
             static_fields_off: 0,
         };
-        accessor.num_static_fields = decode_leb128_off(&class_data, &mut accessor.ptr_pos)?;
-        accessor.num_instance_fields = decode_leb128_off(&class_data, &mut accessor.ptr_pos)?;
-        accessor.num_direct_methods = decode_leb128_off(&class_data, &mut accessor.ptr_pos)?;
-        accessor.num_virtual_methods = decode_leb128_off(&class_data, &mut accessor.ptr_pos)?;
+        accessor.num_static_fields = decode_leb128_off(class_data, &mut accessor.ptr_pos)?;
+        accessor.num_instance_fields = decode_leb128_off(class_data, &mut accessor.ptr_pos)?;
+        accessor.num_direct_methods = decode_leb128_off(class_data, &mut accessor.ptr_pos)?;
+        accessor.num_virtual_methods = decode_leb128_off(class_data, &mut accessor.ptr_pos)?;
         accessor.static_fields_off = accessor.ptr_pos as u32;
         Ok(accessor)
     }
@@ -376,7 +365,7 @@ impl<'a> ClassAccessor<'a> {
         // switch to instance fields
         Ok(DataIterator::new(
             self.class_data,
-            offset as usize,
+            offset,
             self.num_direct_methods as usize,
             self.num_methods(),
         ))
@@ -405,8 +394,8 @@ impl<'a> ClassAccessor<'a> {
         F: Fn(&T) -> Result<()>,
     {
         for _ in 0..count {
-            iter.read(&self.class_data, offset)?;
-            visitor(&iter)?;
+            iter.read(self.class_data, offset)?;
+            visitor(iter)?;
         }
         Ok(())
     }
@@ -528,7 +517,7 @@ impl<'a, T: ClassItemBase> DataIterator<'a, T> {
     }
 }
 
-impl<'a, T: ClassItemBase> Iterator for DataIterator<'a, T> {
+impl<T: ClassItemBase> Iterator for DataIterator<'_, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -536,7 +525,7 @@ impl<'a, T: ClassItemBase> Iterator for DataIterator<'a, T> {
             if self.pos == self.partition_pos {
                 self.value.next_section();
             }
-            match self.value.read(&self.class_data, &mut self.off) {
+            match self.value.read(self.class_data, &mut self.off) {
                 Ok(()) => {}
                 Err(_) => {
                     self.pos = self.end_pos;
@@ -547,7 +536,7 @@ impl<'a, T: ClassItemBase> Iterator for DataIterator<'a, T> {
             self.pos += 1;
             return Some(self.value);
         }
-        return None;
+        None
     }
 }
 

@@ -187,7 +187,7 @@ where
     if (file_size - offset as usize) < size as usize {
         return dex_err!(BadSection {
             offset: offset + size,
-            size: file_size as usize,
+            size: file_size,
             section: label
         });
     }

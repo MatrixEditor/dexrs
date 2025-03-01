@@ -48,11 +48,11 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
         let mut result = String::new();
         if opts == prettify::Field::WithType {
             result.push_str(&self.pretty_type_opt_at(field_id.type_idx)?);
-            result.push_str(" ");
+            result.push(' ');
         }
 
         result.push_str(&self.pretty_type_opt_at(field_id.class_idx)?);
-        result.push_str(".");
+        result.push('.');
 
         result.push_str(&self.get_utf16_str_lossy_at(field_id.name_idx)?);
         Ok(result)
@@ -89,7 +89,7 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
 
     pub fn pretty_utf16_at(&self, idx: u32) -> String {
         match self.get_string_id(idx) {
-            Ok(str_data) => self.pretty_utf16(&str_data),
+            Ok(str_data) => self.pretty_utf16(str_data),
             Err(_) => format!("<<invalid-string-idx-{}>>", idx),
         }
     }
@@ -159,7 +159,7 @@ impl<'a> Instruction<'a> {
         }
 
         Ok(match self.format() {
-            &Format::k10x => format!("{opcode}"),
+            &Format::k10x => opcode.to_string(),
             Format::k12x => format!("{opcode} v{}, v{}", vreg::A(self)?, vreg::B(self)?),
             Format::k11n => format!("{opcode} v{}, #{:+}", vreg::A(self)?, vreg::B(self)?),
             Format::k11x => format!("{opcode} v{}", vreg::A(self)?),

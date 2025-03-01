@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use memmap2::{Mmap, MmapMut};
 use plain::Plain;
 
@@ -48,11 +50,11 @@ impl From<&'static str> for DexLocation {
     }
 }
 
-impl ToString for DexLocation {
-    fn to_string(&self) -> String {
+impl Display for DexLocation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            DexLocation::InMemory => "[in-memory]".to_string(),
-            DexLocation::Path(path) => path.to_string(),
+            DexLocation::InMemory => write!(f, "[in-memory]"),
+            DexLocation::Path(path) => write!(f, "{}", path),
         }
     }
 }
@@ -150,10 +152,7 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
         }
 
         let data = &base[offset as usize..];
-        match T::slice_from_bytes_len(data, len as usize) {
-            Ok(slice) => slice,
-            Err(_) => &[],
-        }
+        T::slice_from_bytes_len(data, len as usize).unwrap_or_default()
     }
 
     pub fn from_raw_parts(base: &'a C, location: DexLocation) -> Result<DexFile<'a, C>> {
@@ -161,7 +160,7 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
             return dex_err!(TruncatedFile);
         }
 
-        let header = match Header::from_bytes(&base) {
+        let header = match Header::from_bytes(base) {
             Ok(header) => header,
             // REVISIT: we already checked the header
             Err(_) => return dex_err!(TruncatedFile),
@@ -241,7 +240,7 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
 
     #[inline(always)]
     pub fn get_header(&self) -> &'a Header {
-        &self.header
+        self.header
     }
 
     // ------------------------------------------------------------------------------
@@ -555,8 +554,8 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
     pub fn get_try_items(&'a self, ca: &CodeItemAccessor<'_>) -> Result<&'a [TryItem]> {
         // skip heavy work if there are no try items
         match ca.get_tries_abs_off() {
-            None => return Ok(&[]),
-            Some(tries_off) => self.get_try_items_raw(tries_off as u32, ca.tries_size() as u16),
+            None => Ok(&[]),
+            Some(tries_off) => self.get_try_items_raw(tries_off, ca.tries_size()),
         }
     }
 
@@ -595,7 +594,7 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
     ) -> Result<Option<EncodedCatchHandlerIterator<'_>>> {
         match self.get_catch_handler_data(ca, offset)? {
             None => Ok(None),
-            Some(data) => Ok(Some(EncodedCatchHandlerIterator::new(&data)?)),
+            Some(data) => Ok(Some(EncodedCatchHandlerIterator::new(data)?)),
         }
     }
 
@@ -649,8 +648,7 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
     }
 
     #[inline]
-    pub fn get_annotation(&self, annotation_off: u32) -> Result<AnnotationItem>
-    {
+    pub fn get_annotation(&self, annotation_off: u32) -> Result<AnnotationItem> {
         check_lt_result!(annotation_off, self.file_size(), Annotation);
         AnnotationItem::from_raw_parts(&self.mmap[annotation_off as usize..])
     }
@@ -705,7 +703,7 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
             );
         }
         match T::from_bytes(&self.mmap[offset as usize..]) {
-            Ok(v) => Ok(&v),
+            Ok(v) => Ok(v),
             Err(plain::Error::TooShort) => {
                 dex_err!(DexLayoutError, self, offset, std::any::type_name::<T>(), 0)
             }
@@ -733,7 +731,7 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
             );
         }
         match T::slice_from_bytes_len(&self.mmap[offset as usize..], len) {
-            Ok(v) => Ok(&v),
+            Ok(v) => Ok(v),
             Err(plain::Error::TooShort) => dex_err!(
                 DexLayoutError,
                 self,
@@ -812,7 +810,7 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
 
         let size = self.file_size();
         let end = (self.header.map_off as usize) + std::mem::size_of::<u32>();
-        end as usize > size || !plain::is_aligned::<u32>(&self.mmap[0..end as usize])
+        end > size || !plain::is_aligned::<u32>(&self.mmap[0..end])
     }
 
     fn init_sections_from_maplist(&mut self) {
@@ -823,7 +821,7 @@ impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
 
         let map_list_size_off = self.header.map_off;
         let map_list_off = (self.header.map_off as usize) + std::mem::size_of::<u32>();
-        if map_list_off >= self.file_size() as usize {
+        if map_list_off >= self.file_size() {
             // bad offset
             return;
         }

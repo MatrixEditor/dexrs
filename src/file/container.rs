@@ -64,13 +64,13 @@ impl<'a> InMemoryDexContainer<'a> {
 impl<'a> Deref for InMemoryDexContainer<'a> {
     type Target = [u8];
     fn deref(&self) -> &'a Self::Target {
-        &self.0
+        self.0
     }
 }
 
 impl<'a> AsRef<[u8]> for InMemoryDexContainer<'a> {
     fn as_ref(&self) -> &'a [u8] {
-        &self.0
+        self.0
     }
 }
 
@@ -180,7 +180,7 @@ impl DexFileContainer {
         self
     }
 
-    pub fn open<'a>(&'a self) -> Result<MmapDexFile<'a>> {
+    pub fn open(&self) -> Result<MmapDexFile<'_>> {
         MmapDexFile::open_file(self)
     }
 

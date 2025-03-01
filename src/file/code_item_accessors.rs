@@ -84,10 +84,8 @@ impl<'a> CodeItemAccessor<'a> {
 
     #[inline]
     pub fn get_tries_abs_off(&self) -> Option<u32> {
-        match self.get_tries_off() {
-            None => None,
-            Some(tries_off) => Some(tries_off + self.insns_off()),
-        }
+        self.get_tries_off()
+            .map(|tries_off| tries_off + self.insns_off())
     }
 
     #[inline]
@@ -97,10 +95,8 @@ impl<'a> CodeItemAccessor<'a> {
 
     #[inline]
     pub fn get_catch_handler_data_abs_off(&self) -> Option<u32> {
-        match self.get_catch_handler_data_off() {
-            None => None,
-            Some(data_off) => Some(data_off + self.insns_off()),
-        }
+        self.get_catch_handler_data_off()
+            .map(|data_off| data_off + self.insns_off())
     }
 
     #[inline]
@@ -308,7 +304,7 @@ pub struct EncodedCatchHandlerIterator<'a> {
 impl<'a> EncodedCatchHandlerIterator<'a> {
     pub fn new(data: &'a [u8]) -> Result<Self> {
         let mut pos = 0;
-        let remaining = leb128::decode_sleb128(&data, &mut pos)?;
+        let remaining = leb128::decode_sleb128(data, &mut pos)?;
         println!("remaining: {}", remaining);
         Ok(Self {
             data,
@@ -327,11 +323,11 @@ impl<'a> EncodedCatchHandlerIterator<'a> {
 
     #[inline(always)]
     fn leb128(&mut self) -> Result<u32> {
-        leb128::decode_leb128_off::<u32>(&self.data, &mut self.offset)
+        leb128::decode_leb128_off::<u32>(self.data, &mut self.offset)
     }
 }
 
-impl<'a> Iterator for EncodedCatchHandlerIterator<'a> {
+impl Iterator for EncodedCatchHandlerIterator<'_> {
     type Item = CatchHandlerData;
 
     fn next(&mut self) -> Option<Self::Item> {
