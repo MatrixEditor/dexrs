@@ -108,7 +108,7 @@ pub fn run(args: &InspectArgs) -> Result<()> {
                 .map_err(|_| anyhow::anyhow!("build thread panicked"))?
         });
 
-    // Drop the mmap handles — all data is now owned by classes/file_info.
+    // Drop the mmap handles - all data is now owned by classes/file_info.
     drop(dex);
     drop(container);
     drop(file);
@@ -120,7 +120,7 @@ pub fn run(args: &InspectArgs) -> Result<()> {
             Err(e)
         }
         Ok(None) => {
-            // User cancelled loading — restore terminal and exit cleanly.
+            // User cancelled loading - restore terminal and exit cleanly.
             disable_raw_mode()?;
             execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
             Ok(())
@@ -216,7 +216,7 @@ pub fn build_app_state<'a, C: DexContainer<'a>>(
                             Some((raw, desc))
                         })
                         .unwrap_or_else(|| (name.clone(), "()V".to_string()));
-                    // Only read the code_item header (4 × u16) — no instruction scanning.
+                    // Only read the code_item header (4 × u16) - no instruction scanning.
                     let code_info = build_code_info(dex, m.code_offset);
                     methods.push(MemberEntry {
                         name,
@@ -274,7 +274,7 @@ pub fn build_app_state<'a, C: DexContainer<'a>>(
     Ok(Some((classes, file_info)))
 }
 
-/// Fast code-item header read: registers, ins, outs, tries — zero instruction scanning.
+/// Fast code-item header read: registers, ins, outs, tries - zero instruction scanning.
 fn build_code_info<'a, C: DexContainer<'a>>(dex: &DexFile<'a, C>, code_off: u32) -> Option<String> {
     if code_off == 0 { return None; }
     let ca = dex.get_code_item_accessor(code_off).ok()?;
@@ -378,7 +378,7 @@ pub fn run_vdex_inspect(
         }
     };
 
-    // Extract the raw DEX bytes — must be copied because the mmap/container
+    // Extract the raw DEX bytes - must be copied because the mmap/container
     // lifetime ends when this function returns and App owns its bytes.
     let dex_bytes = vdex.get_dex_file_data(chosen)?.to_vec();
     drop(vdex);

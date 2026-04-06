@@ -15,7 +15,7 @@ fn dex_get_method(dex: &DexFile<'_>) -> Result<()> {
 
     // name is a string. To resolve everything manually, you would need
     // to fetch the string id first
-    let name = dex.get_utf16_str_at(method_id.name_idx)?;
+    let name = dex.get_str_at(method_id.name_idx)?;
     let proto_id = dex.get_proto_id(method_id.proto_idx)?;
 
     // the declaring class name is just a TypeId, which points to a
@@ -44,7 +44,7 @@ fn dex_get_field(dex: &DexFile<'_>) -> Result<()> {
     assert!(dex.field_id_idx(field_id)? == 0);
 
     // same as for methods
-    let name = dex.get_utf16_str_at(field_id.name_idx)?;
+    let name = dex.get_str_at(field_id.name_idx)?;
     let type_name = dex.get_type_desc_utf16_at(field_id.type_idx)?;
     let class_name = dex.get_type_desc_utf16_at(field_id.class_idx)?;
 

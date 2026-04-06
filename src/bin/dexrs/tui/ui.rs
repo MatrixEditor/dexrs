@@ -1,4 +1,4 @@
-//! TUI renderer — 2-pane layout: collapsible class tree + scrollable code/details pane.
+//! TUI renderer - 2-pane layout: collapsible class tree + scrollable code/details pane.
 //!
 //! Layout:
 //! ```
@@ -25,7 +25,7 @@ use super::app::{App, AppMode, Focus, MemberKind, TreeItem};
 use crate::highlight;
 
 // -- Palette -------------------------------------------------------------------
-// All muted RGB values — avoid terminal neons, keep contrast readable but calm.
+// All muted RGB values - avoid terminal neons, keep contrast readable but calm.
 
 /// Active-border / accent (steel blue)
 const ACCENT: Color = Color::Rgb(95, 135, 175);
@@ -339,7 +339,7 @@ fn build_code_viewer_content(app: &mut App) -> (String, Vec<Line<'static>>) {
                     Style::default().fg(DIM),
                 )),
             ];
-            (format!(" Package — {pkg_display} "), lines)
+            (format!(" Package - {pkg_display} "), lines)
         }
         TreeItem::Class { class_idx, .. } => {
             let cls = &app.classes[*class_idx];
@@ -378,7 +378,7 @@ fn build_code_viewer_content(app: &mut App) -> (String, Vec<Line<'static>>) {
             } else {
                 &cls.fields[mi - cls.methods.len()]
             };
-            let title = format!(" {} — {} ", member.kind.label(), member.raw_name);
+            let title = format!(" {} - {} ", member.kind.label(), member.raw_name);
             let mut lines: Vec<Line> = Vec::new();
 
             // Signature / type
@@ -393,7 +393,7 @@ fn build_code_viewer_content(app: &mut App) -> (String, Vec<Line<'static>>) {
             if styled_disasm.is_empty() {
                 lines.push(Line::default());
                 lines.push(Line::from(Span::styled(
-                    "(abstract / native — no code)",
+                    "(abstract / native - no code)",
                     Style::default().fg(DIM).add_modifier(Modifier::ITALIC),
                 )));
                 if app.is_editable() {

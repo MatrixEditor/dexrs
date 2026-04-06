@@ -97,7 +97,7 @@ where
     p.section(&format!(".method {flags} {full_name}"));
 
     if code_off == 0 {
-        p.item("(abstract / native — no code)");
+        p.item("(abstract / native - no code)");
         return Ok(());
     }
 

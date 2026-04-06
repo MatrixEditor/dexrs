@@ -120,11 +120,11 @@ struct Pools {
     protos: Vec<ProtoKey>,
     proto_idx: HashMap<ProtoKey, u32>,
 
-    /// Sorted field keys: (class_desc, name, field_type) — all MUTF-8.
+    /// Sorted field keys: (class_desc, name, field_type) - all MUTF-8.
     fields: Vec<FieldKey>,
     field_idx: FieldHashMap,
 
-    /// Sorted method keys: (class_desc, name, proto) — class+name as MUTF-8.
+    /// Sorted method keys: (class_desc, name, proto) - class+name as MUTF-8.
     methods: Vec<(Vec<u8>, Vec<u8>, ProtoKey)>,
     method_idx: HashMap<(Vec<u8>, Vec<u8>, ProtoKey), u32>,
 }
@@ -429,7 +429,7 @@ impl DexWriter {
         // checksum placeholder (4 bytes)
         let checksum_pos = out.len();
         out.write_u32(0);
-        // SHA-1 signature (20 bytes — we leave it as zeros; most tools don't verify)
+        // SHA-1 signature (20 bytes - we leave it as zeros; most tools don't verify)
         for _ in 0..20 {
             out.write_u8(0);
         }

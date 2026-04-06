@@ -10,10 +10,10 @@ fn dex_strings(dex: &DexFile<'_>) -> Result<()> {
     // name can be retrieved in various ways:
     //
     // 1. modified utf8 -> utf16 with checks
-    let name = dex.get_utf16_str(string_id)?;
+    let name = dex.get_str(string_id)?;
     //
     // 2. modified utf8 -> utf16 lossy
-    let name = dex.get_utf16_str_lossy(string_id)?;
+    let name = dex.get_str_lossy(string_id)?;
     //
     // 3. modified utf8 -> utf8 unsafe (but fast)
     let name = unsafe { dex.fast_get_utf8_str(string_id)? };
@@ -24,7 +24,7 @@ fn dex_strings(dex: &DexFile<'_>) -> Result<()> {
 
     // all of the operations above can be done with the
     // index directly
-    let name = dex.get_utf16_str_lossy_at(0)?;
+    let name = dex.get_str_lossy_at(0)?;
 
     Ok(())
 }

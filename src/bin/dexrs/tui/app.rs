@@ -36,7 +36,7 @@ pub struct MemberEntry {
     /// Disassembly is computed on-demand from this offset and cached in `App::disasm_cache`.
     pub code_offset: u32,
     /// Code metadata summary (registers, ins, outs, tries).
-    /// Fast to read — just 4 u16 fields from the code_item header.
+    /// Fast to read - just 4 u16 fields from the code_item header.
     pub code_info: Option<String>,
 }
 
@@ -56,7 +56,7 @@ impl MemberEntry {
     }
 }
 
-/// Cached disassembly for one method — computed lazily on first view.
+/// Cached disassembly for one method - computed lazily on first view.
 pub struct DisasmEntry {
     /// Styled spans for the code viewer (PC -> highlighted tokens).
     pub styled: Vec<(u32, StyledLine)>,
@@ -194,7 +194,7 @@ pub struct CodeEditState {
     pub method_name: String,
     /// (registers, ins, outs) from original code_info.
     pub registers: (u16, u16, u16),
-    /// Dirty flag — true after any modification.
+    /// Dirty flag - true after any modification.
     pub dirty: bool,
     /// Buffer for the currently-edited line (LineEdit sub-mode).
     pub line_buf: String,
@@ -313,7 +313,7 @@ pub struct ModalState {
 pub struct App {
     // -- Source data ----------------------------------------------------------
     pub classes: Vec<ClassEntry>,
-    /// Raw DEX bytes — always populated; used for lazy disassembly and edit mode.
+    /// Raw DEX bytes - always populated; used for lazy disassembly and edit mode.
     pub raw_bytes: Vec<u8>,
     /// Path to write the modified DEX file.  `Some` enables edit mode.
     pub output_path: Option<PathBuf>,

@@ -3,7 +3,7 @@
 //! This module is intentionally thin: all semantic knowledge about which parts
 //! of an instruction carry which meaning lives in the library's
 //! [`dexrs::file::dump`] module.  Here we only translate [`Highlight`] tags to
-//! the two presentation targets we support — ratatui (TUI) and crossterm (CLI).
+//! the two presentation targets we support - ratatui (TUI) and crossterm (CLI).
 
 use crossterm::style::Stylize;
 #[cfg(feature = "tui")]
@@ -15,7 +15,7 @@ use ratatui::{
     text::{Line, Span as TuiSpan},
 };
 
-// Muted, low-contrast palette — readable on both dark and light backgrounds.
+// Muted, low-contrast palette - readable on both dark and light backgrounds.
 //   Opcode       dusty gold         #C8A96A
 //   Register     soft sage          #7BAF7B
 //   Immediate    muted mauve        #A07BA0

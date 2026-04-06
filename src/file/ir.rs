@@ -3,7 +3,7 @@
 //! The IR stores everything symbolically: class/type/field/method names are kept
 //! as plain `String`s, and integer pool indices are assigned only at write time by
 //! [`crate::file::writer::DexWriter`].  This makes the representation trivially
-//! composable — add a class, add a method, splice in instructions — without having
+//! composable - add a class, add a method, splice in instructions - without having
 //! to maintain cross-references by hand.
 //!
 //! # Quick start
@@ -41,7 +41,7 @@ use crate::file::instruction::Code;
 
 /// Key identifying a method prototype.
 ///
-/// Sorted by return type first, then parameter types lexicographically — the
+/// Sorted by return type first, then parameter types lexicographically - the
 /// same ordering the DEX spec requires for `proto_ids`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ProtoKey {

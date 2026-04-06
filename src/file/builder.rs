@@ -136,7 +136,7 @@ fn next_token(s: &str) -> Result<(Token, &str)> {
             Ok((Token::Register(n), &s[end..]))
         }
 
-        // p-register: p0..p255 — kept as Token::PRegister; caller resolves to vN
+        // p-register: p0..p255 - kept as Token::PRegister; caller resolves to vN
         Some(b'p') => {
             let end = s[1..]
                 .find(|c: char| !c.is_ascii_digit())
@@ -234,7 +234,7 @@ fn next_token(s: &str) -> Result<(Token, &str)> {
         // Type/Method/Field reference: L...; or [[...
         Some(b'L') | Some(b'[') => parse_reference(s),
 
-        // Primitive type descriptor (V, I, B, etc.) — treat as type ref
+        // Primitive type descriptor (V, I, B, etc.) - treat as type ref
         Some(b'V')
         | Some(b'B')
         | Some(b'C')
@@ -250,7 +250,7 @@ fn next_token(s: &str) -> Result<(Token, &str)> {
             Ok((Token::TypeRef(s[..end].to_string()), &s[end..]))
         }
 
-        // Signed integer literal (no # prefix) — branch offsets (+5, -3) and bare numbers
+        // Signed integer literal (no # prefix) - branch offsets (+5, -3) and bare numbers
         Some(c) if (*c as char).is_ascii_digit() || *c == b'-' || *c == b'+' => {
             let end = s
                 .find(|c: char| c == ',' || c == '}' || c.is_whitespace())
@@ -937,7 +937,7 @@ fn require_reg_list(tokens: &[Token], idx: usize) -> Result<Vec<u16>> {
     match tokens.get(idx) {
         Some(Token::RegList(r)) => Ok(r.clone()),
         Some(Token::RegRange(first, last)) => Ok((*first..=*last).collect()),
-        // Single register not in braces — still valid
+        // Single register not in braces - still valid
         Some(Token::Register(r)) | Some(Token::PRegister(r)) => Ok(vec![*r]),
         other => Err(DexError::DexFileError(format!(
             "expected register list at token {idx}, got {other:?}"
@@ -997,7 +997,7 @@ fn make_ref(
     }
 }
 
-// -- DexIrBuilder — high-level builder facade ----------------------------------
+// -- DexIrBuilder - high-level builder facade ----------------------------------
 
 /// High-level builder that progressively constructs a [`DexIr`] and emits classes,
 /// methods, and fields through a fluent API.
@@ -1228,14 +1228,14 @@ mod tests {
 
     #[test]
     fn parse_typed_literal_int() {
-        // #int +65536 — emitted by dump.rs imm_typed_u32
+        // #int +65536 - emitted by dump.rs imm_typed_u32
         let n = parse_line("const/high16 v0, #int +65536").unwrap();
         assert_eq!(n.literal, 65536);
     }
 
     #[test]
     fn parse_typed_literal_long() {
-        // #long +1234567890 — emitted by dump.rs imm_typed_u64
+        // #long +1234567890 - emitted by dump.rs imm_typed_u64
         let n = parse_line("const-wide v0, #long +1234567890").unwrap();
         assert_eq!(n.literal, 1234567890);
     }

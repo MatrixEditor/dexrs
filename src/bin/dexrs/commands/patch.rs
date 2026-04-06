@@ -10,7 +10,7 @@ fn parse_int(s: &str) -> Result<u32> {
     }
 }
 
-/// `patch flags` — in-place: set class access flags, then update checksum.
+/// `patch flags` - in-place: set class access flags, then update checksum.
 ///
 /// Uses `DexEditor` for class lookup; writes the result back to the same file.
 pub fn run_flags(args: &PatchFlagsArgs) -> Result<()> {
@@ -29,7 +29,7 @@ pub fn run_flags(args: &PatchFlagsArgs) -> Result<()> {
     Ok(())
 }
 
-/// `patch insn` — in-place: overwrite one instruction word, then update checksum.
+/// `patch insn` - in-place: overwrite one instruction word, then update checksum.
 pub fn run_insn(args: &PatchInsnArgs) -> Result<()> {
     let code_off = parse_int(&args.code_offset).context("--code-offset")?;
     let word = parse_int(&args.word).context("--word")? as u16;

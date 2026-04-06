@@ -109,9 +109,9 @@ impl VdexFileHeader {
 ///
 /// Layout (12 bytes):
 /// ```text
-/// section_kind    u32 LE — VdexSection discriminant
-/// section_offset  u32 LE — byte offset from start of file
-/// section_size    u32 LE — byte length of section (0 = absent)
+/// section_kind    u32 LE - VdexSection discriminant
+/// section_offset  u32 LE - byte offset from start of file
+/// section_size    u32 LE - byte length of section (0 = absent)
 /// ```
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
@@ -150,7 +150,7 @@ pub type MmapVdexFile<'a> = VdexFile<'a, memmap2::Mmap>;
 /// let vdex = VdexFile::from_raw_parts(&mmap, ())?;
 /// ```
 pub struct VdexFile<'a, C: DexContainer<'a> = memmap2::Mmap> {
-    /// Reference to the backing container — same field name and semantics as
+    /// Reference to the backing container - same field name and semantics as
     /// `DexFile::mmap`.
     pub(crate) mmap: &'a C,
     /// Owned copy of the file-level header, read via `plain::copy_from_bytes`
@@ -164,7 +164,7 @@ impl<'a, C: DexContainer<'a>> VdexFile<'a, C> {
     // -- Helper: raw slice from container --------------------------------------
 
     /// Returns `&'a [u8]` for `container[start..end]`, propagating the
-    /// container's lifetime — the same pattern used by `DexFile::get_section`.
+    /// container's lifetime - the same pattern used by `DexFile::get_section`.
     #[inline]
     fn raw_slice(base: &'a C, start: usize, end: usize) -> &'a [u8] {
         &base[start..end]
@@ -261,7 +261,7 @@ impl<'a, C: DexContainer<'a>> VdexFile<'a, C> {
 
     /// Returns a raw `&'a [u8]` for the given section (empty when absent).
     ///
-    /// The returned slice borrows directly from the container — no copying.
+    /// The returned slice borrows directly from the container - no copying.
     pub fn get_section_data(&self, kind: VdexSection) -> &'a [u8] {
         let Some(hdr) = self.get_section_header(kind) else {
             return &[];
@@ -313,7 +313,7 @@ impl<'a, C: DexContainer<'a>> VdexFile<'a, C> {
     }
 
     /// Returns the raw bytes of the DEX file at `index` as a `&'a [u8]` slice
-    /// that borrows directly from the container — no copying.
+    /// that borrows directly from the container - no copying.
     ///
     /// DEX files inside the section are stored back-to-back with 4-byte
     /// alignment (matching `OatWriter::SeekToDexFiles`).
@@ -548,11 +548,11 @@ mod tests {
             checksum_section_offset as u32,
             checksum_section_size as u32,
         );
-        // kDexFileSection — absent
+        // kDexFileSection - absent
         write_section(&mut out, 1, VdexSection::DexFile as u32, 0, 0);
-        // kVerifierDepsSection — absent
+        // kVerifierDepsSection - absent
         write_section(&mut out, 2, VdexSection::VerifierDeps as u32, 0, 0);
-        // kTypeLookupTableSection — absent
+        // kTypeLookupTableSection - absent
         write_section(&mut out, 3, VdexSection::TypeLookupTable as u32, 0, 0);
 
         // Write checksums.
@@ -630,7 +630,7 @@ mod tests {
         let mut data = build_vdex(&[]);
         data[4] = b'0';
         data[5] = b'0';
-        data[6] = b'1'; // version "001\0" — not supported
+        data[6] = b'1'; // version "001\0" - not supported
         assert!(matches!(
             VdexFile::from_raw_parts(&data),
             Err(DexError::UnknownVdexVersion { .. })

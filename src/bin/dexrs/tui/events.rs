@@ -13,7 +13,7 @@ fn handle_browse(app: &mut App, code: KeyCode, mods: KeyModifiers) {
     if matches!(code, KeyCode::Char('q') | KeyCode::Char('Q'))
         || (code == KeyCode::Char('c') && mods.contains(KeyModifiers::CONTROL))
     {
-        // Signal quit via a special code — handled by returning Quit in the outer loop.
+        // Signal quit via a special code - handled by returning Quit in the outer loop.
         // We re-use the Action enum by setting a flag. Easier: just set a quit flag.
         // Actually we can't return from here, so we'll use an app flag.
         app.show_help = false; // placeholder; handled below in outer match

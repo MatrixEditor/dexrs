@@ -1,10 +1,10 @@
 //! CLI handlers for VDEX file operations.
 //!
 //! Subcommands:
-//! - `vdex info`    — show header, sections and checksums
-//! - `vdex list`    — tabular list of all embedded DEX files
-//! - `vdex extract` — write a single embedded DEX to disk
-//! - `vdex inspect` — launch the TUI inspector on an embedded DEX
+//! - `vdex info`    - show header, sections and checksums
+//! - `vdex list`    - tabular list of all embedded DEX files
+//! - `vdex extract` - write a single embedded DEX to disk
+//! - `vdex inspect` - launch the TUI inspector on an embedded DEX
 
 use std::fs::File;
 
