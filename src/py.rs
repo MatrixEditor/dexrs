@@ -1,0 +1,115 @@
+pub(crate) mod file;
+pub(crate) mod leb128;
+pub(crate) mod utf;
+pub(crate) mod error;
+pub(crate) mod container;
+pub(crate) mod class_accessor;
+pub(crate) mod structs;
+pub(crate) mod primitive;
+pub(crate) mod type_lookup_table;
+pub(crate) mod editor;
+pub(crate) mod builder;
+
+macro_rules! rs_type_wrapper {
+    ($src_type:ty, $py_type:ident, $rs_type:ident, name: $name:literal, module: $module:literal) => {
+        #[cfg(feature = "python")]
+        pub struct $rs_type(pub(crate) $src_type);
+
+        #[cfg(feature = "python")]
+        #[pyo3::pyclass(name = $name, module = $module)]
+        pub struct $py_type {
+            pub(crate) inner: Arc<$rs_type>,
+        }
+
+        #[cfg(feature = "python")]
+        impl From<$src_type> for $py_type {
+            fn from(value: $src_type) -> Self {
+                $py_type {
+                    inner: Arc::new($rs_type(value)),
+                }
+            }
+        }
+
+        #[cfg(feature = "python")]
+        impl $py_type {
+            pub fn from_instance(value: $src_type) -> Self {
+                $py_type::from(value)
+            }
+        }
+    };
+    ($src_type:ty, $py_type:ident, name: $name:literal, module: $module:literal) => {
+        #[cfg(feature = "python")]
+        #[pyo3::pyclass(name = $name, module = $module)]
+        pub struct $py_type(Arc<$src_type>);
+
+        #[cfg(feature = "python")]
+        impl From<$src_type> for $py_type {
+            fn from(value: $src_type) -> Self {
+                $py_type(Arc::new(value))
+            }
+        }
+    };
+}
+
+macro_rules! rs_struct_wrapper {
+    ($name:literal, $py_type:ident, $rust_type:ident) => {
+        #[cfg(feature = "python")]
+        #[derive(Debug, Clone)]
+        #[pyo3::pyclass(name = $name, module = "dexrs._internal.structs")]
+        pub struct $py_type(pub Arc<$rust_type>);
+
+        #[cfg(feature = "python")]
+        impl<'a> From<&'a $rust_type> for $py_type {
+            fn from(value: &'a $rust_type) -> Self {
+                $py_type(Arc::new(value.clone()))
+            }
+        }
+
+        #[cfg(feature = "python")]
+        impl From<$rust_type> for $py_type {
+            fn from(value: $rust_type) -> Self {
+                $py_type(Arc::new(value))
+            }
+        }
+    };
+}
+
+macro_rules! rs_struct_fields {
+    ($py_type:ident, { $(($name:ident, $rtype:ty),)+ }, $($extra:tt)*) => {
+        #[cfg(feature = "python")]
+        #[pyo3::pymethods]
+        impl $py_type {
+            $(
+            #[getter]
+            pub fn $name(&self) -> $rtype {
+                    self.0.$name
+                }
+            )+
+
+            $(
+                $extra
+            )*
+        }
+    };
+    ($py_type:ident, $inner:tt, { $(($name:ident, $rtype:ty),)+ }, $($extra:tt)*) => {
+        #[cfg(feature = "python")]
+        #[pyo3::pymethods]
+        impl $py_type {
+            $(
+            #[getter]
+            pub fn $name(&self) -> $rtype {
+                    self.$inner.0.$name
+                }
+            )+
+
+            $(
+                $extra
+            )*
+        }
+    };
+
+}
+
+pub(crate) use rs_struct_fields;
+pub(crate) use rs_struct_wrapper;
+pub(crate) use rs_type_wrapper;

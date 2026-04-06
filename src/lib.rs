@@ -1,4 +1,57 @@
+use std::result;
 
+pub mod error;
+pub mod file;
+pub mod leb128;
+pub mod utf;
+#[cfg(feature = "vdex")]
+pub mod vdex;
 
-pub mod dalvik;
-pub mod smali;
+pub mod desc_names;
+pub mod primitive;
+
+pub type Result<T> = result::Result<T, error::DexError>;
+
+#[cfg(feature = "python")]
+pub(crate) mod py;
+
+#[cfg(feature = "python")]
+#[pyo3::pymodule]
+mod _internal {
+
+    #[pymodule_export]
+    use crate::py::container::py_container;
+
+    #[pymodule_export]
+    use crate::py::file::py_file;
+
+    #[pymodule_export]
+    use crate::py::error::py_error;
+
+    #[pymodule_export]
+    use crate::py::structs::py_structs;
+
+    #[pymodule_export]
+    use crate::py::utf::py_utf;
+
+    #[pymodule_export]
+    use crate::py::leb128::py_leb128;
+
+    #[pymodule_export]
+    use crate::py::class_accessor::py_class_accessor;
+
+    #[pymodule_export]
+    use crate::file::instruction::py_code;
+
+    #[pymodule_export]
+    use crate::py::primitive::py_primitive;
+
+    #[pymodule_export]
+    use crate::py::type_lookup_table::py_type_lookup_table;
+
+    #[pymodule_export]
+    use crate::py::editor::py_editor;
+
+    #[pymodule_export]
+    use crate::py::builder::py_builder;
+}

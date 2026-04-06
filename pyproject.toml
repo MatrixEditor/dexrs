@@ -1,0 +1,44 @@
+[build-system]
+requires = ["maturin>=1.8,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "dexrs"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+]
+dynamic = ["version"]
+
+[dependency-groups]
+dev = [
+    "maturin>=1.8,<2.0",
+    "pytest>=8",
+    "mypy>=1.10",
+    "ruff>=0.9",
+]
+
+[tool.maturin]
+# allows us to use `cargo install --features python` directly
+features = ["pyo3/extension-module", "dexrs/python"]
+python-packages = ["dexrs"]
+python-source = "python"
+module-name = "dexrs._internal"
+
+[tool.pytest.ini_options]
+testpaths = ["python/tests"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+mypy_path = "python"
+packages = ["dexrs"]
+
+[tool.ruff]
+src = ["python"]
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
