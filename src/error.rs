@@ -57,6 +57,12 @@ pub enum DexError {
     #[error("{0}")]
     DexFileError(String),
 
+    #[error("Attempted to read {item_ty} at null offset (offset 0 is reserved for the DEX header)")]
+    NullOffset { item_ty: &'static str },
+
+    #[error("Unaligned read of {item_ty} at offset {offset}")]
+    UnalignedRead { offset: u32, item_ty: &'static str },
+
     #[error("Index({index}) to {item_ty} should be less than {max}")]
     DexIndexError {
         index: u32,
@@ -193,6 +199,28 @@ pub enum DexError {
         opcode: &'static str,
         target: &'static str,
     },
+
+    // -- VDEX errors -----------------------------------------------------------
+
+    #[cfg(feature = "vdex")]
+    #[error("Invalid VDEX magic bytes")]
+    BadVdexMagic,
+
+    #[cfg(feature = "vdex")]
+    #[error("Unsupported VDEX version: {version:?}")]
+    UnknownVdexVersion { version: [u8; 4] },
+
+    #[cfg(feature = "vdex")]
+    #[error("VDEX file is too short to contain a valid header (size={size})")]
+    TruncatedVdexFile { size: usize },
+
+    #[cfg(feature = "vdex")]
+    #[error("VDEX section '{section}' is invalid: {msg}")]
+    BadVdexSection { section: &'static str, msg: String },
+
+    #[cfg(feature = "vdex")]
+    #[error("VDEX DEX file index {index} out of range (num_dex_files={num_dex_files})")]
+    VdexDexIndexOutOfRange { index: u32, num_dex_files: u32 },
 }
 
 #[macro_export]
@@ -223,35 +251,5 @@ macro_rules! dex_err {
 impl Debug for DexError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self)
-    }
-}
-
-#[cfg(feature = "python")]
-#[pyo3::pymodule(name = "error")]
-pub(crate) mod py_error {
-    use pyo3::exceptions::PyException;
-
-    pyo3::create_exception!(dexrs._internal.error, PyDexError, PyException);
-
-    impl From<super::DexError> for pyo3::PyErr {
-        fn from(err: super::DexError) -> pyo3::PyErr {
-            PyDexError::new_err(err.to_string())
-        }
-    }
-
-    #[pymodule_export]
-    use PyDexError as PyDexErrorExport;
-
-    // generic errors not wrapped by dexrs
-    #[derive(Debug, thiserror::Error)]
-    pub enum GenericError {
-        #[error(transparent)]
-        IOError(#[from] std::io::Error),
-    }
-
-    impl From<GenericError> for pyo3::PyErr {
-        fn from(err: GenericError) -> pyo3::PyErr {
-            pyo3::exceptions::PyIOError::new_err(err.to_string())
-        }
     }
 }

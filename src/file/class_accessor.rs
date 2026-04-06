@@ -540,10 +540,4 @@ impl<T: ClassItemBase> Iterator for DataIterator<'_, T> {
     }
 }
 
-// >>> begin python module export
-#[cfg(feature = "python")]
-#[pyo3::pymodule]
-pub mod py_class_accessor {
-    #[pymodule_export]
-    use super::{PyClassAccessor, PyDexField, PyDexMethod};
-}
+

@@ -298,6 +298,7 @@ define_formats!(
 // ----------------------------------------------------------------------------
 macro_rules! define_index_types {
     ($($index_ty:tt|)*) => {
+        #[derive(Debug)]
         pub enum IndexType {
             $($index_ty,)*
         }
@@ -1138,10 +1139,10 @@ macro_rules! insn_desc_table {
         }
 
         #[cfg(feature = "python")]
-        impl Into<Code> for PyDexCode {
+        impl From<PyDexCode> for Code {
             #[inline]
-            fn into(self) -> Code {
-                Instruction::opcode_of(self as u8 as u16)
+            fn from(val: PyDexCode) -> Self {
+                Instruction::opcode_of(val as u8 as u16)
             }
         }
 

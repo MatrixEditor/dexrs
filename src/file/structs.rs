@@ -653,25 +653,3 @@ pub fn annotation(&self) -> PyDexEncodedAnnotation {
 );
 // <<< end python export
 
-// --------------------------------------------------------------------
-// Python API
-// --------------------------------------------------------------------
-// >>> begin python module export
-#[cfg(feature = "python")]
-#[pyo3::pymodule(name = "structs")]
-pub(crate) mod py_structs {
-
-    #[pymodule_export]
-    use super::{
-        PyDexAnnotationElement, PyDexAnnotationItem, PyDexAnnotationsDirectoryItem,
-        PyDexCallSiteIdItem, PyDexCatchHandlerData, PyDexClassDef, PyDexCodeItem,
-        PyDexEncodedAnnotation, PyDexEncodedValue, PyDexFieldAnnotationsItem, PyDexFieldId,
-        PyDexMethodAnnotationsItem, PyDexMethodHandleItem, PyDexMethodId,
-        PyDexParameterAnnotationsItem, PyDexProtoId, PyDexStringId, PyDexTryItem, PyDexTypeId,
-        PyDexTypeItem,
-    };
-
-    #[pymodule_export]
-    use crate::file::header::PyDexHeader;
-}
-// <<< end python module export

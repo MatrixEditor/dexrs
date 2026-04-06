@@ -36,26 +36,3 @@ pub fn decode_leb128p1_off(data_in: &[u8], ptr_pos: &mut usize) -> Result<i32> {
 pub fn decode_sleb128(data_in: &[u8], ptr_pos: &mut usize) -> Result<i32> {
     Ok(leb128fmt::decode_sint_slice::<i32, 32>(data_in, ptr_pos)?)
 }
-
-// python exports
-#[cfg(feature = "python")]
-#[pyo3::pymodule(name = "leb128")]
-pub(crate) mod py_leb128 {
-    use pyo3::PyResult;
-
-    #[pyo3::pyfunction]
-    pub fn decode_uleb128(data_in: &[u8]) -> PyResult<(u32, usize)> {
-        Ok(super::decode_leb128::<u32>(data_in)?)
-    }
-
-    #[pyo3::pyfunction]
-    pub fn decode_sleb128(data_in: &[u8]) -> PyResult<i32> {
-        Ok(super::decode_sleb128(data_in, &mut 0)?)
-    }
-
-    #[pyo3::pyfunction]
-    pub fn decode_leb128p1(data_in: &[u8]) -> PyResult<(i32, usize)> {
-        Ok(super::decode_leb128p1(data_in)?)
-    }
-}
-// end python exports

@@ -1,4 +1,14 @@
 pub(crate) mod file;
+pub(crate) mod leb128;
+pub(crate) mod utf;
+pub(crate) mod error;
+pub(crate) mod container;
+pub(crate) mod class_accessor;
+pub(crate) mod structs;
+pub(crate) mod primitive;
+pub(crate) mod type_lookup_table;
+pub(crate) mod editor;
+pub(crate) mod builder;
 
 macro_rules! rs_type_wrapper {
     ($src_type:ty, $py_type:ident, $rs_type:ident, name: $name:literal, module: $module:literal) => {

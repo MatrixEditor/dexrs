@@ -11,7 +11,7 @@ use super::MmapDexFile;
 use crate::Result;
 
 #[cfg(feature = "python")]
-use crate::error::py_error::GenericError;
+use crate::py::error::GenericError;
 
 // ----------------------------------------------------------------------------
 // DexContainer
@@ -50,32 +50,6 @@ impl<'a> DexContainerMut<'a> for &'a mut [u8] {}
 impl DexContainer<'_> for Vec<u8> {}
 impl DexContainerMut<'_> for Vec<u8> {}
 
-// ----------------------------------------------------------------------------
-// InMemoryDexContainer
-// ----------------------------------------------------------------------------
-pub struct InMemoryDexContainer<'a>(&'a [u8]);
-
-impl<'a> InMemoryDexContainer<'a> {
-    pub fn new(data: &'a [u8]) -> Self {
-        Self(data)
-    }
-}
-
-impl<'a> Deref for InMemoryDexContainer<'a> {
-    type Target = [u8];
-    fn deref(&self) -> &'a Self::Target {
-        self.0
-    }
-}
-
-impl<'a> AsRef<[u8]> for InMemoryDexContainer<'a> {
-    fn as_ref(&self) -> &'a [u8] {
-        self.0
-    }
-}
-
-impl<'a> DexContainer<'a> for InMemoryDexContainer<'a> {}
-
 // >>> begin python export
 
 #[cfg(feature = "python")]
@@ -112,7 +86,7 @@ impl DexContainer<'_> for PyInMemoryDexContainer {}
 
 #[cfg(feature = "python")]
 impl PyInMemoryDexContainer {
-    pub fn open<'py>(py: Python, data: Py<PyBytes>) -> Self {
+    pub fn open(py: Python, data: Py<PyBytes>) -> Self {
         Self {
             data: data.clone_ref(py),
             length: data.as_bytes(py).len(),
@@ -210,7 +184,7 @@ pub struct PyFileDexContainer {
 impl AsRef<[u8]> for PyFileDexContainer {
     #[inline]
     fn as_ref(&self) -> &[u8] {
-        &self.data.as_ref()
+        self.data.as_ref()
     }
 }
 
@@ -219,7 +193,7 @@ impl Deref for PyFileDexContainer {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
-        &self.data.deref()
+        self.data.deref()
     }
 }
 
@@ -269,10 +243,3 @@ impl PyFileDexContainer {
 }
 // <<< end python export
 
-#[cfg(feature = "python")]
-#[pyo3::pymodule(name = "container")]
-pub(crate) mod py_container {
-
-    #[pymodule_export]
-    use super::{PyFileDexContainer, PyInMemoryDexContainer};
-}

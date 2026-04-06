@@ -1,13 +1,33 @@
 use crate::{
-    leb128::{decode_leb128_off, decode_leb128p1_off},
+    leb128::{decode_leb128_off, decode_leb128p1_off, decode_sleb128},
     Result,
 };
 
 use super::StringIndex;
 
+#[derive(Debug, Clone)]
 pub enum SourceFile {
     This,
     Other(StringIndex), // index to file
+}
+
+/// Local variable information decoded from a debug info stream.
+#[derive(Debug, Clone, Default)]
+pub struct LocalInfo {
+    /// Index into string_ids for the variable name, or `None`.
+    pub name_idx: Option<StringIndex>,
+    /// Index into type_ids for the variable type descriptor, or `None`.
+    pub descriptor_idx: Option<StringIndex>,
+    /// Index into string_ids for the Dalvik/generic signature, or `None`.
+    pub signature_idx: Option<StringIndex>,
+    /// DEX program counter where the local comes into scope.
+    pub start_address: u32,
+    /// DEX program counter where the local goes out of scope.
+    pub end_address: u32,
+    /// Register number holding this local.
+    pub reg: u16,
+    /// Whether this local is currently live (used during decoding).
+    pub is_live: bool,
 }
 
 #[rustfmt::skip]
@@ -32,8 +52,8 @@ pub struct PositionInfo {
     pub address: u32,
     pub line: u32,
     pub file: SourceFile,
-    prologue_end: bool,
-    epilogue_begin: bool,
+    pub prologue_end: bool,
+    pub epilogue_begin: bool,
 }
 
 impl PositionInfo {
@@ -69,16 +89,16 @@ impl<'a> CodeItemDebugInfoAccessor<'a> {
 
     pub fn visit_parameter_names<F>(&self, visitor: F) -> Result<()>
     where
-        F: Fn(u32),
+        F: FnMut(u32),
     {
         let mut offset = 0;
         self.decode_parameter_names(visitor, &mut offset)?;
         Ok(())
     }
 
-    fn decode_parameter_names<F>(&self, visitor: F, offset: &mut usize) -> Result<u32>
+    fn decode_parameter_names<F>(&self, mut visitor: F, offset: &mut usize) -> Result<u32>
     where
-        F: Fn(u32),
+        F: FnMut(u32),
     {
         let line = decode_leb128_off(self.ptr, offset)?;
         let size = decode_leb128_off::<u32>(self.ptr, offset)?;
@@ -90,9 +110,9 @@ impl<'a> CodeItemDebugInfoAccessor<'a> {
         Ok(line)
     }
 
-    pub fn decode_position_info<F>(&self, pos_visitor: F) -> Result<()>
+    pub fn decode_position_info<F>(&self, mut pos_visitor: F) -> Result<()>
     where
-        F: Fn(&PositionInfo),
+        F: FnMut(&PositionInfo),
     {
         let mut entry = PositionInfo::new();
         let mut offset = 0;
@@ -104,12 +124,13 @@ impl<'a> CodeItemDebugInfoAccessor<'a> {
 
             match opcode {
                 code::DBG_END_SEQUENCE => break,
-                // This will cause overflow
                 code::DBG_ADVANCE_PC => {
-                    entry.address += decode_leb128_off::<u32>(self.ptr, &mut offset)?
+                    entry.address = entry.address
+                        .wrapping_add(decode_leb128_off::<u32>(self.ptr, &mut offset)?)
                 }
                 code::DBG_ADVANCE_LINE => {
-                    entry.line += decode_leb128_off::<u32>(self.ptr, &mut offset)?
+                    let delta = decode_sleb128(self.ptr, &mut offset)?;
+                    entry.line = (entry.line as i32).wrapping_add(delta) as u32;
                 }
                 code::DBG_START_LOCAL => {
                     decode_leb128_off::<u32>(self.ptr, &mut offset)?; // reg
@@ -133,9 +154,11 @@ impl<'a> CodeItemDebugInfoAccessor<'a> {
                 }
                 _ => {
                     let adjusted_opcode = opcode - code::DBG_FIRST_SPECIAL;
-                    entry.address += (adjusted_opcode / code::DBG_LINE_RANGE) as u32;
-                    entry.line +=
-                        (code::DBG_LINE_BASE + (adjusted_opcode % code::DBG_LINE_RANGE)) as u32;
+                    entry.address = entry.address
+                        .wrapping_add((adjusted_opcode / code::DBG_LINE_RANGE) as u32);
+                    let line_delta = (code::DBG_LINE_BASE as i8 as i32)
+                        + (adjusted_opcode % code::DBG_LINE_RANGE) as i32;
+                    entry.line = (entry.line as i32).wrapping_add(line_delta) as u32;
                     pos_visitor(&entry);
                     entry.epilogue_begin = false;
                     entry.prologue_end = false;
@@ -145,8 +168,140 @@ impl<'a> CodeItemDebugInfoAccessor<'a> {
         Ok(())
     }
 
-    // TODO
-    // pub fn decode_local_info<F>(&self, visitor: F)
+    /// Returns the source line number for the given DEX program counter, or `None`
+    /// if no position entry covers that PC.  Matches ART's `GetLineNumForPc`.
+    pub fn get_line_for_pc(&self, dex_pc: u32) -> Result<Option<u32>> {
+        let mut result: Option<u32> = None;
+        self.decode_position_info(|pos| {
+            if pos.address <= dex_pc {
+                result = Some(pos.line);
+            }
+        })?;
+        Ok(result)
+    }
+
+    /// Decodes the local variable table and calls `visitor` for each completed
+    /// (or still-live-at-end) local variable.
+    ///
+    /// `num_regs` should come from [`CodeItem::registers_size`].
+    /// Matches ART's `CodeItemDebugInfoAccessor::DecodeDebugLocalInfo`.
+    pub fn decode_local_info<F>(&self, num_regs: u16, mut visitor: F) -> Result<()>
+    where
+        F: FnMut(&LocalInfo),
+    {
+        let mut locals: Vec<LocalInfo> = (0..num_regs as usize)
+            .map(|i| LocalInfo { reg: i as u16, ..Default::default() })
+            .collect();
+
+        let mut offset = 0usize;
+        // skip line start and parameter names
+        decode_leb128_off::<u32>(self.ptr, &mut offset)?;
+        let param_count = decode_leb128_off::<u32>(self.ptr, &mut offset)?;
+        for _ in 0..param_count {
+            decode_leb128p1_off(self.ptr, &mut offset)?;
+        }
+
+        let mut address: u32 = 0;
+
+        loop {
+            if offset >= self.ptr.len() {
+                break;
+            }
+            let opcode = self.ptr[offset];
+            offset += 1;
+
+            match opcode {
+                code::DBG_END_SEQUENCE => break,
+                code::DBG_ADVANCE_PC => {
+                    address = address
+                        .wrapping_add(decode_leb128_off::<u32>(self.ptr, &mut offset)?);
+                }
+                code::DBG_ADVANCE_LINE => {
+                    decode_sleb128(self.ptr, &mut offset)?;
+                }
+                code::DBG_START_LOCAL => {
+                    let reg = decode_leb128_off::<u32>(self.ptr, &mut offset)? as usize;
+                    let name = decode_leb128p1_off(self.ptr, &mut offset)?;
+                    let descriptor = decode_leb128p1_off(self.ptr, &mut offset)?;
+                    if reg < locals.len() {
+                        if locals[reg].is_live {
+                            let mut ended = locals[reg].clone();
+                            ended.end_address = address;
+                            visitor(&ended);
+                        }
+                        locals[reg] = LocalInfo {
+                            reg: reg as u16,
+                            name_idx: if name >= 0 { Some(name as u32) } else { None },
+                            descriptor_idx: if descriptor >= 0 { Some(descriptor as u32) } else { None },
+                            signature_idx: None,
+                            start_address: address,
+                            end_address: 0,
+                            is_live: true,
+                        };
+                    }
+                }
+                code::DBG_START_LOCAL_EXTENDED => {
+                    let reg = decode_leb128_off::<u32>(self.ptr, &mut offset)? as usize;
+                    let name = decode_leb128p1_off(self.ptr, &mut offset)?;
+                    let descriptor = decode_leb128p1_off(self.ptr, &mut offset)?;
+                    let signature = decode_leb128p1_off(self.ptr, &mut offset)?;
+                    if reg < locals.len() {
+                        if locals[reg].is_live {
+                            let mut ended = locals[reg].clone();
+                            ended.end_address = address;
+                            visitor(&ended);
+                        }
+                        locals[reg] = LocalInfo {
+                            reg: reg as u16,
+                            name_idx: if name >= 0 { Some(name as u32) } else { None },
+                            descriptor_idx: if descriptor >= 0 { Some(descriptor as u32) } else { None },
+                            signature_idx: if signature >= 0 { Some(signature as u32) } else { None },
+                            start_address: address,
+                            end_address: 0,
+                            is_live: true,
+                        };
+                    }
+                }
+                code::DBG_END_LOCAL => {
+                    let reg = decode_leb128_off::<u32>(self.ptr, &mut offset)? as usize;
+                    if reg < locals.len() && locals[reg].is_live {
+                        let mut ended = locals[reg].clone();
+                        ended.end_address = address;
+                        ended.is_live = false;
+                        visitor(&ended);
+                        locals[reg].is_live = false;
+                    }
+                }
+                code::DBG_RESTART_LOCAL => {
+                    let reg = decode_leb128_off::<u32>(self.ptr, &mut offset)? as usize;
+                    if reg < locals.len() && !locals[reg].is_live {
+                        locals[reg].start_address = address;
+                        locals[reg].is_live = true;
+                    }
+                }
+                code::DBG_SET_PROLOGUE_END | code::DBG_SET_EPILOGUE_BEGIN => {}
+                code::DBG_SET_FILE => {
+                    decode_leb128p1_off(self.ptr, &mut offset)?;
+                }
+                _ => {
+                    let adjusted_opcode = opcode - code::DBG_FIRST_SPECIAL;
+                    address = address
+                        .wrapping_add((adjusted_opcode / code::DBG_LINE_RANGE) as u32);
+                }
+            }
+        }
+
+        // flush locals still live at end of method
+        for local in &locals {
+            if local.is_live {
+                let mut ended = local.clone();
+                ended.end_address = address;
+                visitor(&ended);
+            }
+        }
+        Ok(())
+    }
+
 }
 
 pub struct DebugInfoParameterNamesIterator<'dex> {

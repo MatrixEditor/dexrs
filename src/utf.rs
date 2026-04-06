@@ -24,44 +24,6 @@ pub fn str_to_mutf8_lossy(str_data_in: &str) -> Vec<u8> {
     utf16_to_mutf8(&utf16_data_in, &options)
 }
 
-// python exports
-#[cfg(feature = "python")]
-#[pyo3::pymodule(name = "mutf8")]
-pub(crate) mod py_utf {
-
-    use crate::error::DexError;
-    use pyo3::PyResult;
-
-    #[pyo3::pyfunction]
-    pub fn mutf8_to_str(utf8_data_in: &[u8]) -> PyResult<String> {
-        if let Some(end) = utf8_data_in.iter().position(|&x| x == 0) {
-            Ok(super::mutf8_to_str(&utf8_data_in[0..=end])?)
-        } else {
-            Err(DexError::BadStringDataMissingNullByte(utf8_data_in.as_ptr() as usize).into())
-        }
-    }
-
-    #[pyo3::pyfunction]
-    pub fn mutf8_to_str_lossy(utf8_data_in: &[u8]) -> PyResult<String> {
-        if let Some(end) = utf8_data_in.iter().position(|&x| x == 0) {
-            Ok(super::mutf8_to_str_lossy(&utf8_data_in[0..=end])?)
-        } else {
-            Err(DexError::BadStringDataMissingNullByte(utf8_data_in.as_ptr() as usize).into())
-        }
-    }
-
-    #[pyo3::pyfunction]
-    pub fn str_to_mutf8(str_data_in: &str) -> Vec<u8> {
-        super::str_to_mutf8(str_data_in)
-    }
-
-    #[pyo3::pyfunction]
-    pub fn str_to_mutf8_lossy(str_data_in: &str) -> Vec<u8> {
-        super::str_to_mutf8_lossy(str_data_in)
-    }
-}
-// end python exports
-
 #[inline]
 fn utf16_from_utf8(utf8_data_in: &[u8], offset: &mut usize) -> u32 {
     let one = utf8_data_in[*offset];
@@ -101,7 +63,7 @@ fn trailing_utf16_char(maybe_pair: u32) -> u16 {
 
 #[inline(always)]
 fn leading_utf16_char(maybe_pair: u32) -> u16 {
-    (maybe_pair & 0x0000FFFFF) as u16
+    (maybe_pair & 0x0000FFFF) as u16
 }
 
 #[inline(always)]
@@ -138,12 +100,12 @@ pub fn mutf8_len(utf8_data_in: &[u8], utf8_in_len: usize) -> Result<usize> {
         in_idx += 1;
         len += 1;
         if ic & 0x80 == 0 {
-            continue; // one byze encoding
+            continue; // one byte encoding
         }
 
         in_idx += 1;
         if ic & 0x20 == 0 {
-            // two byze encoding
+            // two byte encoding
             continue;
         }
 
@@ -200,7 +162,7 @@ fn convert_mutf8_to_utf16(utf8_data_in: &[u8], utf8_in_len: usize, out_chars: us
 }
 
 fn utf16_to_mutf8(utf16_in: &[u16], options: &Options) -> Vec<u8> {
-    let mut mutf8_len = 0; // trailing null byte
+    let mut mutf8_len = 0;
     convert_utf16_to_mutf8(utf16_in, options, |_| mutf8_len += 1);
 
     let mut mutf8_out;
@@ -208,7 +170,7 @@ fn utf16_to_mutf8(utf16_in: &[u16], options: &Options) -> Vec<u8> {
         // only ascii chars
         mutf8_out = utf16_in.iter().map(|ch| *ch as u8).collect();
     } else {
-        mutf8_out = vec![0x00; mutf8_len + 1];
+        mutf8_out = Vec::with_capacity(mutf8_len + 1);
         convert_utf16_to_mutf8(utf16_in, options, |ch| mutf8_out.push(ch));
     }
 

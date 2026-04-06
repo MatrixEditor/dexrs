@@ -3,7 +3,8 @@ use adler32;
 use crate::{dex_err, error::DexError, Result};
 
 use super::{
-    DexContainer, DexFile, Header, HeaderV41, DEX_ENDIAN_CONSTANT, DEX_MAGIC, DEX_MAGIC_VERSIONS,
+    DexContainer, DexFile, Header, CDEX_MAGIC, CDEX_MAGIC_VERSIONS, DEX_ENDIAN_CONSTANT,
+    DEX_MAGIC, DEX_MAGIC_VERSIONS,
 };
 
 #[derive(Debug, PartialEq, Eq)]
@@ -15,12 +16,13 @@ pub enum VerifyPreset {
 
 impl<'a, C: DexContainer<'a>> DexFile<'a, C> {
     pub fn is_magic_valid(&self) -> bool {
-        &self.header.get_magic()[..4] == DEX_MAGIC
+        let magic4 = &self.header.get_magic()[..4];
+        magic4 == DEX_MAGIC || magic4 == CDEX_MAGIC
     }
 
     pub fn is_version_valid(&self) -> bool {
         let version_raw = &self.header.get_magic()[4..];
-        DEX_MAGIC_VERSIONS.contains(&version_raw)
+        DEX_MAGIC_VERSIONS.contains(&version_raw) || CDEX_MAGIC_VERSIONS.contains(&version_raw)
     }
 
     // TODO: can be changed into enum
@@ -41,50 +43,9 @@ fn check_header<'a, C>(dex: &DexFile<'a, C>, preset: VerifyPreset) -> Result<()>
 where
     C: DexContainer<'a>,
 {
-    let size = dex.file_size();
-    if size < std::mem::size_of::<Header>() {
-        return dex_err!(TruncatedFile);
-    }
-
-    if !dex.is_magic_valid() {
-        return dex_err!(BadFileMagic);
-    }
-
-    if !dex.is_version_valid() {
-        return dex_err!(UnknownDexVersion {
-            version: dex.header.get_version()
-        });
-    }
-
-    // check file size from header
-    let version = dex.header.get_version();
-    let file_size = dex.header.file_size as usize;
-    let header_size = if version >= 41 {
-        std::mem::size_of::<HeaderV41>()
-    } else {
-        std::mem::size_of::<Header>()
-    };
-
-    if file_size < header_size {
-        return dex_err!(FileSizeAtLeast {
-            actual: file_size,
-            expected: header_size
-        });
-    }
-    if file_size > size {
-        return dex_err!(FileSizeAtMost {
-            actual: file_size,
-            expected: size
-        });
-    }
-
-    // check header size
-    if dex.header.header_size as usize != header_size {
-        return dex_err!(BadHeaderSize {
-            size: dex.header.header_size,
-            expected: header_size as u32
-        });
-    }
+    // Structural checks (truncation, magic, version, file/header size) are
+    // already enforced by DexFile::init(), which runs before verify(). Here
+    // we only handle the checks that init() intentionally defers.
 
     // check endian
     if dex.header.endian_tag != DEX_ENDIAN_CONSTANT {
@@ -104,7 +65,7 @@ where
         _ => {}
     };
 
-    let header = dex.header;
+    let header = &dex.header;
     check_valid_offset_and_size(dex, header.link_off, header.link_size, "link")?;
     check_valid_offset_and_size(
         dex,
