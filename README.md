@@ -1,20 +1,9 @@
 # DEXrs
 
-> [!IMPORTANT]
-> Branch `v2-rewrite` contains a complete rewrite of this library including a Python binding.  Installation is as follows:
->
-> Crate:
-> ```bash
-> cargo add --git https://github.com/MatrixEditor/dexrs --branch dev/v2-rewrite
-> cargo install --git https://github.com/MatrixEditor/dexrs --branch dev/v2-rewrite
-> ```
->
-> Python:
-> ```bash
-> pip install -v git+https://github.com/MatrixEditor/dexrs@dev/v2-rewrite
-> ```
-
 **DEXrs** is a Rust library and CLI tool for parsing, inspecting, and modifying Android DEX files. It covers a zero-copy parser, a Dalvik disassembler, a full-featured terminal UI, a DEX modification API, and Python bindings via PyO3.
+
+<img width="1017" height="470" alt="image" src="https://github.com/user-attachments/assets/4823aacb-650c-482a-9373-974ed76375a7" />
+
 
 #### What this project covers
 
@@ -26,6 +15,8 @@
 - [x] Python extension via PyO3 (parser + editor)
 - [ ] Benchmarks (WIP)
 - [ ] Smali disassembler / decompiler
+
+
 
 
 ## Installation
