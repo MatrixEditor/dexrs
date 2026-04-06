@@ -2,14 +2,14 @@
 
 Provides types for iterating and inspecting Dalvik bytecode instructions.
 
-- :class:`CodeItemAccessor` — iterate over instructions in a method body.
-- :class:`Instruction` — a single decoded Dalvik instruction.
-- :class:`Code` — opcode enum (``NOP``, ``MOVE``, ``INVOKE_VIRTUAL``, …).
-- :class:`Format` — instruction format enum (``k10x``, ``k35c``, …).
-- :class:`IndexType` — type of the index operand in an instruction.
-- :class:`FillArrayDataPayload` — payload for ``fill-array-data``.
-- :class:`SparseSwitchPayload` — payload for ``sparse-switch``.
-- :class:`PackedSwitchPayload` — payload for ``packed-switch``.
+- :class:`CodeItemAccessor` - iterate over instructions in a method body.
+- :class:`Instruction` - a single decoded Dalvik instruction.
+- :class:`Code` - opcode enum (``NOP``, ``MOVE``, ``INVOKE_VIRTUAL``, …).
+- :class:`Format` - instruction format enum (``k10x``, ``k35c``, …).
+- :class:`IndexType` - type of the index operand in an instruction.
+- :class:`FillArrayDataPayload` - payload for ``fill-array-data``.
+- :class:`SparseSwitchPayload` - payload for ``sparse-switch``.
+- :class:`PackedSwitchPayload` - payload for ``packed-switch``.
 """
 
 from typing import List, Optional

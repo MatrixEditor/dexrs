@@ -2,15 +2,15 @@
 
 Classes
 -------
-- :class:`DexIrBuilder` — Assemble a full DEX file from class definitions.
-- :class:`IrClassDef`   — Define a class (fields, methods, superclass…).
-- :class:`IrMethodDef`  — Define a method with optional bytecode body.
-- :class:`IrFieldDef`   — Define a field (convenience; usually use the
+- :class:`DexIrBuilder` - Assemble a full DEX file from class definitions.
+- :class:`IrClassDef`   - Define a class (fields, methods, superclass…).
+- :class:`IrMethodDef`  - Define a method with optional bytecode body.
+- :class:`IrFieldDef`   - Define a field (convenience; usually use the
   ``add_*_field`` methods on :class:`IrClassDef`).
-- :class:`CodeBuilder`  — Assemble Dalvik bytecode from disassembly text lines.
-- :class:`CodeDef`      — An assembled code item (return value of
+- :class:`CodeBuilder`  - Assemble Dalvik bytecode from disassembly text lines.
+- :class:`CodeDef`      - An assembled code item (return value of
   :meth:`CodeBuilder.build`).
-- :class:`ProtoKey`     — Method prototype (return type + parameter types).
+- :class:`ProtoKey`     - Method prototype (return type + parameter types).
 
 Quick-start
 -----------

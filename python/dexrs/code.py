@@ -3,14 +3,14 @@
 This module re-exports the full ``code`` sub-package from the native
 extension, which provides:
 
-- :class:`CodeItemAccessor` — iterate over instructions in a method body.
-- :class:`Instruction` — a single decoded Dalvik instruction.
-- :class:`Code` — opcode enum (``NOP``, ``MOVE``, ``INVOKE_VIRTUAL``, …).
-- :class:`Format` — instruction format enum (``k10x``, ``k35c``, …).
-- :class:`IndexType` — index-operand type enum.
-- :data:`code_flags`, :data:`verify_flags`, :data:`flags` — flag constant modules.
-- :data:`signatures` — well-known pseudo-instruction signatures.
-- :data:`vreg` — virtual-register operand accessor functions.
+- :class:`CodeItemAccessor` - iterate over instructions in a method body.
+- :class:`Instruction` - a single decoded Dalvik instruction.
+- :class:`Code` - opcode enum (``NOP``, ``MOVE``, ``INVOKE_VIRTUAL``, …).
+- :class:`Format` - instruction format enum (``k10x``, ``k35c``, …).
+- :class:`IndexType` - index-operand type enum.
+- :data:`code_flags`, :data:`verify_flags`, :data:`flags` - flag constant modules.
+- :data:`signatures` - well-known pseudo-instruction signatures.
+- :data:`vreg` - virtual-register operand accessor functions.
 
 Example::
 

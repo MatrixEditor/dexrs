@@ -4,8 +4,8 @@ A *container* is the backing store that holds the raw DEX bytes.  Pass one to
 :meth:`~dexrs.DexFile.from_bytes` or :meth:`~dexrs.DexFile.from_file` when
 opening a DEX file.
 
-- :class:`InMemoryDexContainer` — wraps an in-memory ``bytes`` buffer.
-- :class:`FileDexContainer` — memory-maps a file on disk (zero-copy reads).
+- :class:`InMemoryDexContainer` - wraps an in-memory ``bytes`` buffer.
+- :class:`FileDexContainer` - memory-maps a file on disk (zero-copy reads).
 
 Example::
 

@@ -22,7 +22,7 @@ class PrimitiveType:
     """
 
     Not: "PrimitiveType"
-    """Sentinel value — not a primitive type."""
+    """Sentinel value - not a primitive type."""
 
     Boolean: "PrimitiveType"
     """Java ``boolean`` (descriptor ``Z``)."""

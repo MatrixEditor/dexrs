@@ -1,4 +1,4 @@
-"""dexrs — Python bindings for the Rust DEX file parsing library.
+"""dexrs - Python bindings for the Rust DEX file parsing library.
 
 This package exposes the full public API of the ``dexrs`` Rust crate via
 PyO3-generated native extensions, re-exported under clean Python names.
@@ -18,15 +18,15 @@ Quickstart::
 
 Submodules
 ----------
-- :mod:`dexrs.file` — :class:`DexFile` and :class:`VerifyPreset`
-- :mod:`dexrs.container` — :class:`InMemoryDexContainer`, :class:`FileDexContainer`
-- :mod:`dexrs.editor` — :class:`DexEditor` for mutation
-- :mod:`dexrs.code` — Instructions, opcodes, and operand helpers
-- :mod:`dexrs.error` — :exc:`PyDexError`
-- :mod:`dexrs.leb128` — LEB128 varint decoders
-- :mod:`dexrs.mutf8` — MUTF-8 ↔ str conversion
-- :mod:`dexrs.primitive` — :class:`PrimitiveType` enum
-- :mod:`dexrs.type_lookup_table` — :class:`TypeLookupTable`
+- :mod:`dexrs.file` - :class:`DexFile` and :class:`VerifyPreset`
+- :mod:`dexrs.container` - :class:`InMemoryDexContainer`, :class:`FileDexContainer`
+- :mod:`dexrs.editor` - :class:`DexEditor` for mutation
+- :mod:`dexrs.code` - Instructions, opcodes, and operand helpers
+- :mod:`dexrs.error` - :exc:`PyDexError`
+- :mod:`dexrs.leb128` - LEB128 varint decoders
+- :mod:`dexrs.mutf8` - MUTF-8 ↔ str conversion
+- :mod:`dexrs.primitive` - :class:`PrimitiveType` enum
+- :mod:`dexrs.type_lookup_table` - :class:`TypeLookupTable`
 """
 # some shortcuts
 from .file import DexFile, VerifyPreset

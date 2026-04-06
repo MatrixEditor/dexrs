@@ -25,7 +25,7 @@ class Header:
     header_size: int
     """Size of this header in bytes (112 for standard DEX, 120 for DEX 041+)."""
     endian_tag: int
-    """Endianness tag — always ``0x12345678`` for standard DEX."""
+    """Endianness tag - always ``0x12345678`` for standard DEX."""
     link_size: int
     """Size of the link section (0 for statically linked files)."""
     link_off: int

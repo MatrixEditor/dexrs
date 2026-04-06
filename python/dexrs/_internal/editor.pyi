@@ -6,7 +6,7 @@ class DexEditor:
 
     Construct an editor from a file path or raw bytes, apply zero or more
     mutations, then call :meth:`build` or :meth:`write_to` to finalise.
-    The editor is **consumed** by :meth:`build` or :meth:`write_to` — any
+    The editor is **consumed** by :meth:`build` or :meth:`write_to` - any
     subsequent call will raise :exc:`IOError`.
 
     Example::

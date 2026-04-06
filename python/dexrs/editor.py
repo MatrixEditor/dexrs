@@ -1,7 +1,7 @@
 """Thin Python wrapper re-exporting :class:`DexEditor`.
 
-:class:`DexEditor` provides targeted in-place mutations of a DEX file —
-renaming classes, changing access flags, clearing hidden-API annotations —
+:class:`DexEditor` provides targeted in-place mutations of a DEX file -
+renaming classes, changing access flags, clearing hidden-API annotations -
 without requiring a full re-assembly of the DEX.
 
 The editor is **consumed** once :meth:`~DexEditor.build` or

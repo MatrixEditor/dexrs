@@ -13,11 +13,11 @@ differs from standard UTF-8 in two ways:
 
 Functions
 ---------
-- :func:`mutf8_to_str` — strict MUTF-8 bytes -> Python :class:`str`.
-- :func:`mutf8_to_str_lossy` — lenient variant; replaces invalid sequences
+- :func:`mutf8_to_str` - strict MUTF-8 bytes -> Python :class:`str`.
+- :func:`mutf8_to_str_lossy` - lenient variant; replaces invalid sequences
   with the Unicode replacement character ``U+FFFD``.
-- :func:`str_to_mutf8` — Python :class:`str` -> MUTF-8 bytes (strict).
-- :func:`str_to_mutf8_lossy` — lenient variant; skips unencodable code points.
+- :func:`str_to_mutf8` - Python :class:`str` -> MUTF-8 bytes (strict).
+- :func:`str_to_mutf8_lossy` - lenient variant; skips unencodable code points.
 
 Example::
 

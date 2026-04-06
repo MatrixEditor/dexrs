@@ -2,8 +2,8 @@
 
 The central types for parsing and querying Android DEX files.
 
-- :class:`VerifyPreset` — controls which header checks to run on open.
-- :class:`DexFile` — the parsed DEX image; exposes read-only accessors for
+- :class:`VerifyPreset` - controls which header checks to run on open.
+- :class:`DexFile` - the parsed DEX image; exposes read-only accessors for
   every section described by the `AOSP DEX format specification`_.
 
 .. _AOSP DEX format specification:
@@ -41,7 +41,7 @@ class VerifyPreset:
     ALL: "VerifyPreset"
     """Run all available checks (magic, checksum, and structural validation)."""
     NONE: "VerifyPreset"
-    """Skip all verification — fastest open, but unsafe on untrusted input."""
+    """Skip all verification - fastest open, but unsafe on untrusted input."""
     CHECKSUM_ONLY: "VerifyPreset"
     """Verify the Adler32 checksum only, skipping deeper structural checks."""
 

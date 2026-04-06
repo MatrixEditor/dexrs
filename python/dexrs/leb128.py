@@ -8,9 +8,9 @@ extensively in the DEX format for sizes, offsets, and access flags.
 
 Functions
 ---------
-- :func:`decode_uleb128` — unsigned LEB128 -> non-negative :class:`int`.
-- :func:`decode_sleb128` — signed LEB128 -> signed :class:`int`.
-- :func:`decode_leb128p1` — ``ULEB128p1`` encoding (value stored as ``n+1``),
+- :func:`decode_uleb128` - unsigned LEB128 -> non-negative :class:`int`.
+- :func:`decode_sleb128` - signed LEB128 -> signed :class:`int`.
+- :func:`decode_leb128p1` - ``ULEB128p1`` encoding (value stored as ``n+1``),
   where ``-1`` encodes the special *no-index* sentinel.
 
 Example::
